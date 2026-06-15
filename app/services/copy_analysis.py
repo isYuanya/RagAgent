@@ -1,21 +1,38 @@
+import json
+
+from pydantic import ValidationError
+
+from app.core.llm import get_llm_client
 from app.schemas.copy import CopyAnalysisRequest, CopyAnalysisResponse
-from app.services.compliance import inspect_risks
 
 
 def analyze_copy(payload: CopyAnalysisRequest) -> CopyAnalysisResponse:
-    text = payload.source_text.strip()
-    first_sentence = text.split("。")[0].split("\n")[0][:80] or "待识别主题"
-
-    return CopyAnalysisResponse(
-        topic=first_sentence,
-        target_user=payload.audience or "待确认目标用户",
-        core_pain="用户注意力不足或转化阻力",
-        emotion_buttons=["好奇", "共鸣", "危机感"],
-        hook=first_sentence,
-        structure=["提出问题", "放大痛点", "给出观点", "举例说明", "行动建议"],
-        expression_skills=["短句", "反问", "对比", "数字化表达"],
-        reusable_template="如果你是____，一定要注意____。",
-        suitable_scenarios=["直播引流", "私域成交", "课程种草", "个人IP"],
-        risk_warnings=inspect_risks(text),
-        confidence=0.62,
+    prompt = (
+        "你是短视频/口播文案拆解专家。请只返回 JSON，不要返回 Markdown。\n"
+        "JSON 字段必须包含：topic、target_user、core_pain、emotion_buttons、hook、"
+        "structure、expression_skills、reusable_template、suitable_scenarios、"
+        "risk_warnings、confidence。\n"
+        "risk_warnings 是对象数组，每项包含 level、message、suggestion。\n"
+        f"文案：{payload.source_text.strip()}\n"
+        f"上下文：industry={payload.industry}, audience={payload.audience}, "
+        f"platform={payload.platform}, purpose={payload.purpose}, style={payload.style}"
     )
+    raw = get_llm_client().complete(prompt)
+
+    try:
+        parsed = json.loads(_strip_json_fence(raw))
+        return CopyAnalysisResponse.model_validate(parsed)
+    except (json.JSONDecodeError, ValidationError) as exc:
+        raise RuntimeError(f"LLM returned invalid copy analysis JSON: {exc}") from exc
+
+
+def _strip_json_fence(raw: str) -> str:
+    text = raw.strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        return "\n".join(lines).strip()
+    return text
