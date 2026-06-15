@@ -30,6 +30,26 @@ def test_health_check() -> None:
     assert response.json()["status"] == "ok"
 
 
+def test_cors_allows_localhost_frontend_origins() -> None:
+    response = client.options(
+        "/api/health",
+        headers={
+            "Origin": "http://127.0.0.1:5174",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:5174"
+
+
+def test_cors_headers_are_present_on_get_responses() -> None:
+    response = client.get("/api/health", headers={"Origin": "http://localhost:5173"})
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+
+
 def test_copy_analyze_endpoint(monkeypatch) -> None:
     monkeypatch.setattr("app.services.copy_analysis.get_llm_client", lambda: FakeLLMClient())
 
@@ -42,23 +62,32 @@ def test_copy_analyze_endpoint(monkeypatch) -> None:
 def test_import_and_review_copy_asset(monkeypatch) -> None:
     reset_copy_asset_store()
     monkeypatch.setattr("app.services.copy_analysis.get_llm_client", lambda: FakeLLMClient())
+    monkeypatch.setattr("app.api.routes.copy.enqueue_copy_import", lambda csv_text: __import__(
+        "app.services.copy_import_jobs", fromlist=["run_copy_import_task"]
+    ).run_copy_import_task(csv_text))
 
     response = client.post(
         "/api/copy/import",
         json={
             "csv_text": (
-                "source_text,platform,industry,audience,purpose,style,likes\n"
-                "先别急着换产品。,小红书,美妆,新手,引流,专业,120\n"
+                "source_text,platform,industry,audience,purpose,style,likes,author_name,author_url,author_follower_count\n"
+                "先别急着换产品。,小红书,美妆,新手,引流,专业,120,护肤研究员,https://example.com/author/1,52000\n"
             )
         },
     )
 
     assert response.status_code == 200
-    asset_id = response.json()["assets"][0]["id"]
+    task_payload = response.json()
+    assert task_payload["task_id"]
+    assert task_payload["progress"]["model"]
+    assert task_payload["progress"]["percent"] == 100
 
     list_response = client.get("/api/copy/assets")
     assert list_response.status_code == 200
     assert list_response.json()["total"] == 1
+    assert list_response.json()["items"][0]["author_name"] == "护肤研究员"
+    assert list_response.json()["items"][0]["author_follower_count"] == 52000
+    asset_id = list_response.json()["items"][0]["id"]
 
     review_response = client.patch(
         f"/api/copy/assets/{asset_id}/review",
@@ -92,10 +121,17 @@ def test_import_requires_configured_llm(monkeypatch) -> None:
         raise RuntimeError("OPENAI_API_KEY is not configured")
 
     monkeypatch.setattr("app.services.copy_analysis.get_llm_client", raise_config_error)
+    monkeypatch.setattr("app.api.routes.copy.enqueue_copy_import", lambda csv_text: __import__(
+        "app.services.copy_import_jobs", fromlist=["run_copy_import_task"]
+    ).run_copy_import_task(csv_text))
 
     response = client.post(
         "/api/copy/import",
         json={"csv_text": "source_text\n先别急着换产品。\n"},
     )
 
-    assert response.status_code == 503
+    assert response.status_code == 200
+    task_response = client.get(f"/api/tasks/{response.json()['task_id']}")
+    assert task_response.status_code == 200
+    assert task_response.json()["status"] == "failed"
+    assert "OPENAI_API_KEY" in task_response.json()["error"]

@@ -1,4 +1,5 @@
 import json
+import re
 
 from pydantic import ValidationError
 
@@ -21,6 +22,7 @@ def analyze_copy(payload: CopyAnalysisRequest) -> CopyAnalysisResponse:
 
     try:
         parsed = json.loads(_strip_json_fence(raw))
+        parsed = _normalize_analysis_payload(parsed)
         return CopyAnalysisResponse.model_validate(parsed)
     except (json.JSONDecodeError, ValidationError) as exc:
         raise RuntimeError(f"LLM returned invalid copy analysis JSON: {exc}") from exc
@@ -36,3 +38,32 @@ def _strip_json_fence(raw: str) -> str:
             lines = lines[:-1]
         return "\n".join(lines).strip()
     return text
+
+
+def _normalize_analysis_payload(payload: object) -> object:
+    if not isinstance(payload, dict):
+        return payload
+
+    normalized = dict(payload)
+    for field in (
+        "emotion_buttons",
+        "structure",
+        "expression_skills",
+        "suitable_scenarios",
+    ):
+        normalized[field] = _coerce_string_list(normalized.get(field))
+    return normalized
+
+
+def _coerce_string_list(value: object) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [
+            item.strip(" -•\t")
+            for item in re.split(r"\s*(?:->|→|、|，|,|/|；|;|\n)\s*", value)
+            if item.strip(" -•\t")
+        ]
+    return [str(value).strip()]

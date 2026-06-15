@@ -6,6 +6,9 @@ from app.schemas.common import CopyContext, RiskWarning
 class CopyAnalysisRequest(CopyContext):
     source_text: str = Field(min_length=1, description="待拆解的原始文案，不能为空。")
     source_url: str | None = Field(default=None, description="文案来源链接，可为空。")
+    author_name: str | None = Field(default=None, description="发布作者或账号名称。")
+    author_url: str | None = Field(default=None, description="发布作者主页链接。")
+    author_follower_count: int | None = Field(default=None, ge=0, description="作者粉丝数。")
     metrics: dict[str, int] | None = Field(
         default=None,
         description="文案表现数据，例如 likes、comments、favorites、shares。",
@@ -39,6 +42,9 @@ class CopyAssetSummary(CopyContext):
     id: str
     source_text: str
     source_url: str | None = None
+    author_name: str | None = None
+    author_url: str | None = None
+    author_follower_count: int | None = Field(default=None, ge=0)
     metrics: dict[str, int] = Field(default_factory=dict)
     status: str = Field(description="审核状态，例如 pending_review、approved、rejected。")
     auto_analysis: CopyAnalysisResponse | None = None

@@ -15,6 +15,7 @@ class Settings:
     app_env: str = "local"
     api_prefix: str = "/api"
     cors_origins: list[str] = field(default_factory=lambda: ["http://localhost:5173"])
+    cors_origin_regex: str | None = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
 
     database_url: str = "postgresql+psycopg://rag:rag@localhost:5432/rag"
     redis_url: str = "redis://localhost:6379/0"
@@ -52,6 +53,10 @@ def get_settings() -> Settings:
         app_env=os.getenv("APP_ENV", "local"),
         api_prefix=os.getenv("API_PREFIX", "/api"),
         cors_origins=_env_list("CORS_ORIGINS", ["http://localhost:5173"]),
+        cors_origin_regex=os.getenv(
+            "CORS_ORIGIN_REGEX", r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+        )
+        or None,
         database_url=os.getenv(
             "DATABASE_URL", "postgresql+psycopg://rag:rag@localhost:5432/rag"
         ),

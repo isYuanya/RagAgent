@@ -7,14 +7,14 @@ from app.schemas.copy import (
     CopyAssetReviewRequest,
     CopyAssetSummary,
     CopyImportRequest,
-    CopyImportResponse,
 )
+from app.schemas.task import TaskResponse
 from app.services.copy_assets import (
     get_copy_asset,
-    import_copy_assets,
     list_copy_assets,
     review_copy_asset,
 )
+from app.workers.import_queue import enqueue_copy_import
 from app.workflows.copy_analysis import run_analysis_workflow
 
 router = APIRouter()
@@ -28,12 +28,9 @@ def analyze(payload: CopyAnalysisRequest) -> CopyAnalysisResponse:
         raise _llm_http_error(exc) from exc
 
 
-@router.post("/import", response_model=CopyImportResponse)
-def import_assets(payload: CopyImportRequest) -> CopyImportResponse:
-    try:
-        return import_copy_assets(payload.csv_text)
-    except RuntimeError as exc:
-        raise _llm_http_error(exc) from exc
+@router.post("/import", response_model=TaskResponse)
+def import_assets(payload: CopyImportRequest) -> TaskResponse:
+    return enqueue_copy_import(payload.csv_text)
 
 
 @router.get("/assets", response_model=CopyAssetListResponse)
