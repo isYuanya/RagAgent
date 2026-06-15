@@ -66,6 +66,41 @@ export type TaskResponse = {
 
 export type ReviewStatus = "pending_review" | "approved" | "rejected";
 
+// ---- Knowledge base ----
+
+export type ListResponse<T> = {
+  items: T[];
+  total: number;
+  page: number;
+  page_size: number;
+};
+
+export type KnowledgeCollection = {
+  id: string;
+  name: string;
+  description?: string | null;
+  metadata: Record<string, unknown>;
+};
+
+export type KnowledgeCollectionCreate = {
+  name: string;
+  description?: string | null;
+  metadata?: Record<string, unknown>;
+};
+
+export type RawCopySummary = CopyAsset & {
+  collection_ids: string[];
+  collections: KnowledgeCollection[];
+};
+
+export type AnalysisSummary = {
+  id: string;
+  raw_copy_id: string;
+  auto_analysis?: Analysis | null;
+  reviewed_analysis?: Analysis | null;
+  status: string;
+};
+
 export const emptyAnalysis: Analysis = {
   topic: "",
   target_user: "",

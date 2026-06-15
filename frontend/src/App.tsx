@@ -1,10 +1,11 @@
 import * as React from "react";
 import { toast } from "sonner";
-import { Sidebar } from "@/features/Sidebar";
+import { Sidebar, type AppView } from "@/features/Sidebar";
 import { CsvUpload } from "@/features/CsvUpload";
 import { ImportProgress, ImportErrors } from "@/features/ImportProgress";
 import { AssetList } from "@/features/AssetList";
 import { ReviewPanel } from "@/features/ReviewPanel";
+import { KnowledgeView } from "@/features/knowledge/KnowledgeView";
 import { Card } from "@/components/ui/card";
 import {
   fetchAssets,
@@ -15,6 +16,7 @@ import {
 import type { Analysis, CopyAsset, TaskProgress, TaskResponse } from "@/lib/types";
 
 export function App() {
+  const [view, setView] = React.useState<AppView>("workbench");
   const [assets, setAssets] = React.useState<CopyAsset[]>([]);
   const [listLoading, setListLoading] = React.useState(true);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
@@ -106,51 +108,59 @@ export function App() {
 
   return (
     <div className="flex min-h-screen bg-background">
-      <Sidebar assetCount={assets.length} />
+      <Sidebar
+        view={view}
+        onChangeView={setView}
+        assetCount={assets.length}
+      />
 
-      <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between gap-4 border-b border-border px-6 py-4">
-          <div>
-            <h1 className="text-lg font-semibold">文案资产审核工作台</h1>
-            <p className="text-sm text-muted-foreground">
-              批量导入样本文案，校正拆解结果，沉淀为可检索的文案资产。
-            </p>
-          </div>
-          <CsvUpload
-            busy={importing}
-            disabled={importing || saving}
-            onFile={handleUpload}
-          />
-        </header>
-
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 p-6 lg:grid-cols-[minmax(320px,420px)_1fr]">
-          <Card className="flex min-h-0 flex-col overflow-hidden p-4">
-            {importTask?.progress ? (
-              <div className="mb-3">
-                <ImportProgress task={importTask} />
-              </div>
-            ) : null}
-            {errors.length > 0 ? (
-              <div className="mb-3">
-                <ImportErrors errors={errors} />
-              </div>
-            ) : null}
-            <div className="mb-3 text-sm font-semibold">导入与待审</div>
-            <div className="min-h-0 flex-1">
-              <AssetList
-                assets={assets}
-                loading={listLoading}
-                selectedId={selectedId}
-                onSelect={setSelectedId}
-              />
+      {view === "knowledge" ? (
+        <KnowledgeView />
+      ) : (
+        <main className="flex min-w-0 flex-1 flex-col">
+          <header className="flex items-center justify-between gap-4 border-b border-border px-6 py-4">
+            <div>
+              <h1 className="text-lg font-semibold">文案资产审核工作台</h1>
+              <p className="text-sm text-muted-foreground">
+                批量导入样本文案，校正拆解结果，沉淀为可检索的文案资产。
+              </p>
             </div>
-          </Card>
+            <CsvUpload
+              busy={importing}
+              disabled={importing || saving}
+              onFile={handleUpload}
+            />
+          </header>
 
-          <Card className="flex min-h-0 flex-col overflow-hidden p-0">
-            <ReviewPanel asset={selected} saving={saving} onSave={handleSave} />
-          </Card>
-        </div>
-      </main>
+          <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 p-6 lg:grid-cols-[minmax(320px,420px)_1fr]">
+            <Card className="flex min-h-0 flex-col overflow-hidden p-4">
+              {importTask?.progress ? (
+                <div className="mb-3">
+                  <ImportProgress task={importTask} />
+                </div>
+              ) : null}
+              {errors.length > 0 ? (
+                <div className="mb-3">
+                  <ImportErrors errors={errors} />
+                </div>
+              ) : null}
+              <div className="mb-3 text-sm font-semibold">导入与待审</div>
+              <div className="min-h-0 flex-1">
+                <AssetList
+                  assets={assets}
+                  loading={listLoading}
+                  selectedId={selectedId}
+                  onSelect={setSelectedId}
+                />
+              </div>
+            </Card>
+
+            <Card className="flex min-h-0 flex-col overflow-hidden p-0">
+              <ReviewPanel asset={selected} saving={saving} onSave={handleSave} />
+            </Card>
+          </div>
+        </main>
+      )}
     </div>
   );
 }

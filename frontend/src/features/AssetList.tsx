@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import type { CopyAsset } from "@/lib/types";
 import { StatusBadge, STATUS_LABELS } from "./StatusBadge";
+import { EmptyState } from "./shared/EmptyState";
 
 const ALL = "__all__";
 
@@ -196,24 +197,6 @@ function ListSkeleton() {
           <Skeleton className="mt-2 h-3 w-3/4" />
         </div>
       ))}
-    </div>
-  );
-}
-
-function EmptyState({
-  icon,
-  title,
-  hint
-}: {
-  icon: React.ReactNode;
-  title: string;
-  hint: string;
-}) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border py-12 text-center">
-      <div className="text-muted-foreground">{icon}</div>
-      <div className="text-sm font-medium">{title}</div>
-      <div className="max-w-[220px] text-xs text-muted-foreground">{hint}</div>
     </div>
   );
 }

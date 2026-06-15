@@ -1,6 +1,17 @@
-import { Database, FileText, ShieldCheck, Sparkles } from "lucide-react";
+import { Database, FileText, Library } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-export function Sidebar({ assetCount }: { assetCount: number }) {
+export type AppView = "workbench" | "knowledge";
+
+export function Sidebar({
+  view,
+  onChangeView,
+  assetCount
+}: {
+  view: AppView;
+  onChangeView: (view: AppView) => void;
+  assetCount: number;
+}) {
   return (
     <aside className="hidden w-64 shrink-0 flex-col border-r border-border bg-card/60 px-5 py-6 lg:flex">
       <div className="flex items-center gap-2.5">
@@ -14,9 +25,18 @@ export function Sidebar({ assetCount }: { assetCount: number }) {
       </div>
 
       <div className="mt-8 space-y-1.5">
-        <SidebarItem icon={<FileText className="size-4" />} label="文案资产" active />
-        <SidebarItem icon={<Sparkles className="size-4" />} label="拆解校正" />
-        <SidebarItem icon={<ShieldCheck className="size-4" />} label="审核状态" />
+        <SidebarItem
+          icon={<FileText className="size-4" />}
+          label="审核工作台"
+          active={view === "workbench"}
+          onClick={() => onChangeView("workbench")}
+        />
+        <SidebarItem
+          icon={<Library className="size-4" />}
+          label="知识库"
+          active={view === "knowledge"}
+          onClick={() => onChangeView("knowledge")}
+        />
       </div>
 
       <div className="mt-auto rounded-lg border border-border bg-background p-3">
@@ -32,22 +52,27 @@ export function Sidebar({ assetCount }: { assetCount: number }) {
 function SidebarItem({
   icon,
   label,
-  active = false
+  active = false,
+  onClick
 }: {
   icon: React.ReactNode;
   label: string;
   active?: boolean;
+  onClick: () => void;
 }) {
   return (
-    <div
-      className={
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors",
         active
-          ? "flex items-center gap-2.5 rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-foreground"
-          : "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-muted-foreground"
-      }
+          ? "bg-accent font-medium text-accent-foreground"
+          : "text-muted-foreground hover:bg-accent/50"
+      )}
     >
       {icon}
       {label}
-    </div>
+    </button>
   );
 }
