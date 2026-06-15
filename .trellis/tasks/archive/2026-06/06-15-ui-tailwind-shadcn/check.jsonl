@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "检查组件拆分是否有重复样式/逻辑，工具函数是否复用"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "检查 API 调用与数据流无回归，类型契约一致"}

@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "重写要拆分多组件，需避免重复样式/逻辑，复用现有数据类型与 fetch 封装"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "前端改造跨 API/数据/组件层，确保 API 契约与数据流不回归"}
