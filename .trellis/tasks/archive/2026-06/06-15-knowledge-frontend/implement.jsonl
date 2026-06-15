@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "新增多个知识库组件，需复用现有 ui 组件/api 模式/AnalysisView，避免重复"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "新功能跨 api/types/features/App 多层，确保数据流与契约一致、不回归现有工作台"}
+{"file": "doc/FRONTEND_INTEGRATION.md", "reason": "知识库 API 端点、字段、关联关系的权威契约（第7节）"}
+{"file": "doc/SCHEMAS.md", "reason": "knowledge schema 对象字段、类型、枚举、必填性的精确定义（第7节）"}

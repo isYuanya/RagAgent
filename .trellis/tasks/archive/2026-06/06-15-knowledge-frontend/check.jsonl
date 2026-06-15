@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "检查组件/工具是否复用现有，无重复样式逻辑"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "检查跨层数据流、契约一致、现有工作台无回归"}
+{"file": "doc/SCHEMAS.md", "reason": "校验前端类型与 api 调用是否匹配后端 knowledge 契约"}
