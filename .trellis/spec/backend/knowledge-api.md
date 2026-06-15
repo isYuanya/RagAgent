@@ -1,0 +1,146 @@
+# Knowledge API
+
+## Scenario: Multi-Library Knowledge Persistence
+
+### 1. Scope / Trigger
+
+- Trigger: backend work that changes `/api/knowledge/*`, copy asset persistence, or knowledge database tables.
+- Applies to the seven system libraries: raw copies, analyses, fragments, templates, tags, cases, and blocks.
+- Also applies to collections, which group raw copies across business contexts.
+
+### 2. Signatures
+
+API namespace:
+
+```text
+GET|POST   /api/knowledge/collections
+GET|PATCH|DELETE /api/knowledge/collections/{id}
+
+GET|POST   /api/knowledge/raw-copies
+GET|PATCH|DELETE /api/knowledge/raw-copies/{id}
+
+GET|POST   /api/knowledge/analyses
+GET|PATCH|DELETE /api/knowledge/analyses/{id}
+
+GET|POST   /api/knowledge/fragments
+GET|PATCH|DELETE /api/knowledge/fragments/{id}
+
+GET|POST   /api/knowledge/templates
+GET|PATCH|DELETE /api/knowledge/templates/{id}
+
+GET|POST   /api/knowledge/tags
+GET|PATCH|DELETE /api/knowledge/tags/{id}
+
+GET|POST   /api/knowledge/cases
+GET|PATCH|DELETE /api/knowledge/cases/{id}
+
+GET|POST   /api/knowledge/blocks
+GET|PATCH|DELETE /api/knowledge/blocks/{id}
+```
+
+Database tables:
+
+```text
+knowledge_collections
+copy_source_collections
+knowledge_analyses
+knowledge_fragments
+knowledge_templates
+knowledge_tags
+knowledge_cases
+knowledge_blocks
+```
+
+### 3. Contracts
+
+- All list endpoints accept `page` and `page_size`.
+- `raw-copies` also accepts optional `collection_id`.
+- `fragments` also accepts optional `source_copy_id`, `fragment_role`, `position`, and `industry`.
+- Delete endpoints return `204` and use soft-delete semantics where the backing table has `is_deleted`.
+- Templates, tags, cases, and blocks accept optional source traceability:
+
+```json
+{"source": {"source_type": "raw_copy", "source_id": "<id>"}}
+```
+
+`source_type` is `raw_copy` or `analysis`.
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior |
+| --- | --- |
+| Invalid request shape | FastAPI/Pydantic `422` |
+| Missing resource by ID | `404` |
+| Delete existing resource | `204` |
+| Deleted resource fetched again | `404` |
+| Database unavailable in local dev | Service falls back to in-memory store where implemented |
+
+### 5. Good/Base/Bad Cases
+
+- Good: CSV import creates a raw copy and auto analysis; both appear through `/api/knowledge/raw-copies` and `/api/knowledge/analyses`.
+- Base: manually created templates/tags/cases/blocks persist with optional source reference.
+- Base: manually created fragments persist with explicit `source_copy_id`, sequence/context fields, and optional `analysis_id`.
+- Bad: do not create a fake empty analysis just to store a raw copy; raw copies may have `auto_analysis = null`.
+- Bad: do not store fragment provenance only inside `metadata`; use the first-class `source_copy_id`.
+
+### 6. Tests Required
+
+- API test for collection CRUD and raw copy collection assignment.
+- API test for template/tag/case/block CRUD with `source`.
+- API test for fragment CRUD and filters by `source_copy_id`, `fragment_role`, `position`, or `industry`.
+- API test that CSV import populates raw copy and analysis libraries.
+- Full backend regression: `python -m pytest`.
+- Static check: `python -m ruff check app tests alembic`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+# Creates a meaningless analysis row for a raw-only item.
+create_copy_asset(payload, empty_analysis)
+```
+
+#### Correct
+
+```python
+# Raw copies can exist before analysis.
+create_copy_asset(payload, None)
+```
+
+#### Wrong
+
+```text
+/api/knowledge/items?type=template
+```
+
+#### Correct
+
+```text
+/api/knowledge/templates
+```
+
+Each library has an explicit endpoint and schema so frontend and backend contracts stay stable.
+
+#### Wrong
+
+```json
+{"metadata": {"source_copy_id": "<id>"}, "fragment_text": "..."}
+```
+
+#### Correct
+
+```json
+{"source_copy_id": "<id>", "sequence_order": 0, "fragment_text": "..."}
+```
+
+Fragment provenance and ordering are first-class fields so filtering and future retrieval stay stable.
+
+## Fragment Library
+
+- The fragment-level breakdown library is exposed at `/api/knowledge/fragments`.
+- A fragment must keep explicit provenance through `source_copy_id`; `analysis_id` is optional because manually split fragments may not have a persisted analysis row.
+- Fragment records store local sequence and context fields: `sequence_order`, `previous_fragment`, `next_fragment`, `before_context`, `after_context`, `fragment_text`, `fragment_role`, and `position`.
+- Weak tags are plain API fields for now: `industry`, `source_quality`, and `risk_level`. Do not hard-code product taxonomy in service logic until a taxonomy service exists.
+- List filters currently supported by backend contract: `source_copy_id`, `fragment_role`, `position`, and `industry`.
+- Fragment CRUD must follow the same DB-first, in-memory fallback pattern as templates/tags/cases/blocks and must be covered by API tests.

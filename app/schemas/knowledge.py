@@ -1,0 +1,235 @@
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field
+
+from app.schemas.copy import CopyAnalysisResponse, CopyAssetSummary
+
+
+SourceType = Literal["raw_copy", "analysis"]
+
+
+class SourceReference(BaseModel):
+    source_type: SourceType
+    source_id: str
+
+
+class KnowledgeCollectionCreate(BaseModel):
+    name: str = Field(min_length=1)
+    description: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class KnowledgeCollectionUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1)
+    description: str | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class KnowledgeCollection(KnowledgeCollectionCreate):
+    id: str
+
+
+class KnowledgeCollectionListResponse(BaseModel):
+    items: list[KnowledgeCollection]
+    page: int = Field(ge=1)
+    page_size: int = Field(ge=1, le=100)
+    total: int = Field(ge=0)
+
+
+class RawCopyCreate(BaseModel):
+    source_text: str = Field(min_length=1)
+    source_url: str | None = None
+    author_name: str | None = None
+    author_url: str | None = None
+    author_follower_count: int | None = Field(default=None, ge=0)
+    platform: str | None = None
+    industry: str | None = None
+    audience: str | None = None
+    purpose: str | None = None
+    style: str | None = None
+    metrics: dict[str, int] = Field(default_factory=dict)
+    collection_ids: list[str] = Field(default_factory=list)
+
+
+class RawCopyUpdate(BaseModel):
+    source_text: str | None = Field(default=None, min_length=1)
+    source_url: str | None = None
+    author_name: str | None = None
+    author_url: str | None = None
+    author_follower_count: int | None = Field(default=None, ge=0)
+    platform: str | None = None
+    industry: str | None = None
+    audience: str | None = None
+    purpose: str | None = None
+    style: str | None = None
+    metrics: dict[str, int] | None = None
+    collection_ids: list[str] | None = None
+
+
+class RawCopySummary(CopyAssetSummary):
+    collection_ids: list[str] = Field(default_factory=list)
+    collections: list[KnowledgeCollection] = Field(default_factory=list)
+
+
+class RawCopyListResponse(BaseModel):
+    items: list[RawCopySummary]
+    page: int = Field(ge=1)
+    page_size: int = Field(ge=1, le=100)
+    total: int = Field(ge=0)
+
+
+class AnalysisCreate(BaseModel):
+    raw_copy_id: str
+    auto_analysis: CopyAnalysisResponse | None = None
+    reviewed_analysis: CopyAnalysisResponse | None = None
+    status: str = Field(default="pending_review", pattern="^(pending_review|approved|rejected)$")
+
+
+class AnalysisUpdate(BaseModel):
+    auto_analysis: CopyAnalysisResponse | None = None
+    reviewed_analysis: CopyAnalysisResponse | None = None
+    status: str | None = Field(default=None, pattern="^(pending_review|approved|rejected)$")
+
+
+class AnalysisSummary(BaseModel):
+    id: str
+    raw_copy_id: str
+    auto_analysis: CopyAnalysisResponse | None = None
+    reviewed_analysis: CopyAnalysisResponse | None = None
+    status: str
+
+
+class AnalysisListResponse(BaseModel):
+    items: list[AnalysisSummary]
+    page: int = Field(ge=1)
+    page_size: int = Field(ge=1, le=100)
+    total: int = Field(ge=0)
+
+
+class TemplateCreate(BaseModel):
+    title: str = Field(min_length=1)
+    content: str = Field(min_length=1)
+    structure: list[str] = Field(default_factory=list)
+    suitable_scenarios: list[str] = Field(default_factory=list)
+    source: SourceReference | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class TemplateUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1)
+    content: str | None = Field(default=None, min_length=1)
+    structure: list[str] | None = None
+    suitable_scenarios: list[str] | None = None
+    source: SourceReference | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class TemplateItem(TemplateCreate):
+    id: str
+
+
+class TagCreate(BaseModel):
+    name: str = Field(min_length=1)
+    category: Literal["industry", "emotion", "purpose", "audience", "hook_type", "custom"]
+    description: str | None = None
+    source: SourceReference | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class TagUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1)
+    category: Literal["industry", "emotion", "purpose", "audience", "hook_type", "custom"] | None = None
+    description: str | None = None
+    source: SourceReference | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class TagItem(TagCreate):
+    id: str
+
+
+class CaseCreate(BaseModel):
+    title: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+    performance_summary: str | None = None
+    source: SourceReference | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class CaseUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1)
+    reason: str | None = Field(default=None, min_length=1)
+    performance_summary: str | None = None
+    source: SourceReference | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class CaseItem(CaseCreate):
+    id: str
+
+
+class BlockCreate(BaseModel):
+    content: str = Field(min_length=1)
+    block_type: Literal["sensitive_word", "violation", "do_not_copy", "custom"]
+    reason: str | None = None
+    severity: Literal["low", "medium", "high"] = "medium"
+    source: SourceReference | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class BlockUpdate(BaseModel):
+    content: str | None = Field(default=None, min_length=1)
+    block_type: Literal["sensitive_word", "violation", "do_not_copy", "custom"] | None = None
+    reason: str | None = None
+    severity: Literal["low", "medium", "high"] | None = None
+    source: SourceReference | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class BlockItem(BlockCreate):
+    id: str
+
+
+class FragmentCreate(BaseModel):
+    source_copy_id: str
+    analysis_id: str | None = None
+    sequence_order: int = Field(ge=0)
+    previous_fragment: str | None = None
+    next_fragment: str | None = None
+    before_context: str | None = None
+    after_context: str | None = None
+    fragment_text: str = Field(min_length=1)
+    fragment_role: str = Field(min_length=1)
+    position: str = Field(min_length=1)
+    industry: str | None = None
+    source_quality: Literal["unknown", "low", "medium", "high"] = "unknown"
+    risk_level: Literal["low", "medium", "high"] = "low"
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class FragmentUpdate(BaseModel):
+    source_copy_id: str | None = None
+    analysis_id: str | None = None
+    sequence_order: int | None = Field(default=None, ge=0)
+    previous_fragment: str | None = None
+    next_fragment: str | None = None
+    before_context: str | None = None
+    after_context: str | None = None
+    fragment_text: str | None = Field(default=None, min_length=1)
+    fragment_role: str | None = Field(default=None, min_length=1)
+    position: str | None = Field(default=None, min_length=1)
+    industry: str | None = None
+    source_quality: Literal["unknown", "low", "medium", "high"] | None = None
+    risk_level: Literal["low", "medium", "high"] | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class FragmentItem(FragmentCreate):
+    id: str
+
+
+class KnowledgeItemListResponse(BaseModel):
+    items: list[TemplateItem | TagItem | CaseItem | BlockItem | FragmentItem]
+    page: int = Field(ge=1)
+    page_size: int = Field(ge=1, le=100)
+    total: int = Field(ge=0)
