@@ -77,8 +77,9 @@ _db_available: bool | None = None
 
 
 def reset_knowledge_store() -> None:
-    global _store
+    global _db_available, _store
     _store = _Store()
+    _db_available = None
 
 
 def list_collections(page: int = 1, page_size: int = 20) -> KnowledgeCollectionListResponse:
@@ -147,7 +148,7 @@ def list_raw_copies(
         _to_raw_summary(asset.id)
         for asset in assets
         if asset.id not in _store.raw_deleted
-        and (collection_id is None or collection_id in _store.raw_collection_ids.get(asset.id, []))
+        and (collection_id is None or _raw_has_collection(asset.id, collection_id))
     ]
     return RawCopyListResponse(
         items=_page([item for item in items if item is not None], page, page_size),
@@ -1106,6 +1107,13 @@ def _mark_db_available(value: bool) -> None:
 
 def _valid_collection_ids(collection_ids: list[str]) -> list[str]:
     return [collection_id for collection_id in collection_ids if collection_id in _store.collections]
+
+
+def _raw_has_collection(raw_copy_id: str, collection_id: str) -> bool:
+    collection_ids = _db_get_raw_collection_ids(raw_copy_id)
+    if collection_ids is None:
+        collection_ids = _store.raw_collection_ids.get(raw_copy_id, [])
+    return collection_id in collection_ids
 
 
 def _fragment_matches(item: FragmentItem, filters: dict[str, str | None]) -> bool:

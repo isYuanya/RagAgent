@@ -144,3 +144,12 @@ Fragment provenance and ordering are first-class fields so filtering and future 
 - Weak tags are plain API fields for now: `industry`, `source_quality`, and `risk_level`. Do not hard-code product taxonomy in service logic until a taxonomy service exists.
 - List filters currently supported by backend contract: `source_copy_id`, `fragment_role`, `position`, and `industry`.
 - Fragment CRUD must follow the same DB-first, in-memory fallback pattern as templates/tags/cases/blocks and must be covered by API tests.
+
+## Copy Import Contract
+
+- `POST /api/copy/import` accepts exactly one import source:
+  - `csv_text`: existing CSV content path.
+  - `text`: plain text path; backend treats it as one `CopyAnalysisRequest.source_text`, calls the LLM, and saves one copy asset.
+- Sending both `csv_text` and `text`, or neither, must fail request validation with `422`.
+- Plain text import returns the same `TaskResponse` shape as CSV import. On success, `result.asset_ids` contains one asset id and `progress.percent` is `100`.
+- Plain text import uses the same worker queue (`copy_import`) and same Redis fallback behavior as CSV import.

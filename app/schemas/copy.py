@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.common import CopyContext, RiskWarning
 
@@ -29,13 +29,24 @@ class CopyAnalysisResponse(BaseModel):
     confidence: float = Field(ge=0, le=1, description="拆解结果置信度，范围为0到1。")
 
 
-class CopyImportRequest(BaseModel):
+class _LegacyCopyImportRequest(BaseModel):
     csv_text: str = Field(min_length=1, description="CSV 文件内容，由前端读取文件后提交。")
 
 
 class CopyImportRowError(BaseModel):
     row_number: int = Field(ge=1, description="CSV 中出错的行号，包含表头行。")
     message: str = Field(description="这一行无法导入的原因。")
+
+
+class CopyImportRequest(BaseModel):
+    csv_text: str | None = Field(default=None, min_length=1)
+    text: str | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def require_one_import_source(self) -> "CopyImportRequest":
+        if bool(self.csv_text) == bool(self.text):
+            raise ValueError("Provide exactly one of csv_text or text.")
+        return self
 
 
 class CopyAssetSummary(CopyContext):

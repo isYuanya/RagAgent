@@ -34,6 +34,8 @@ _REDIS_ASSET_ORDER = "ragagent:copy_asset_order"
 
 
 def reset_copy_asset_store() -> None:
+    global _db_available
+    _db_available = None
     _copy_assets.clear()
     try:
         redis = _redis()

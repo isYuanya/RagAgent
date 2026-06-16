@@ -114,6 +114,29 @@ def test_import_and_review_copy_asset(monkeypatch) -> None:
     assert review_response.json()["reviewed_analysis"]["topic"] == "校正后的主题"
 
 
+def test_import_plain_text_copy_asset(monkeypatch) -> None:
+    reset_copy_asset_store()
+    monkeypatch.setattr("app.services.copy_analysis.get_llm_client", lambda: FakeLLMClient())
+    monkeypatch.setattr("app.api.routes.copy.enqueue_text_import", lambda text: __import__(
+        "app.services.copy_import_jobs", fromlist=["run_text_import_task"]
+    ).run_text_import_task(text))
+
+    response = client.post(
+        "/api/copy/import",
+        json={"text": "plain text copy"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["progress"]["percent"] == 100
+
+    list_response = client.get("/api/copy/assets")
+    assert list_response.status_code == 200
+    assert list_response.json()["total"] == 1
+    item = list_response.json()["items"][0]
+    assert item["source_text"] == "plain text copy"
+    assert item["auto_analysis"]["confidence"] == 0.8
+
+
 def test_import_requires_configured_llm(monkeypatch) -> None:
     reset_copy_asset_store()
 

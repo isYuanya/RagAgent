@@ -14,7 +14,7 @@ from app.services.copy_assets import (
     list_copy_assets,
     review_copy_asset,
 )
-from app.workers.import_queue import enqueue_copy_import
+from app.workers.import_queue import enqueue_copy_import, enqueue_text_import
 from app.workflows.copy_analysis import run_analysis_workflow
 
 router = APIRouter()
@@ -30,7 +30,9 @@ def analyze(payload: CopyAnalysisRequest) -> CopyAnalysisResponse:
 
 @router.post("/import", response_model=TaskResponse)
 def import_assets(payload: CopyImportRequest) -> TaskResponse:
-    return enqueue_copy_import(payload.csv_text)
+    if payload.text is not None:
+        return enqueue_text_import(payload.text)
+    return enqueue_copy_import(payload.csv_text or "")
 
 
 @router.get("/assets", response_model=CopyAssetListResponse)

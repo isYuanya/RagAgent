@@ -515,3 +515,51 @@ GET /api/knowledge/fragments?fragment_role=hook&position=opening&industry=beauty
 | `source_quality` | string | 否 | `unknown`、`low`、`medium`、`high` |
 | `risk_level` | string | 否 | `low`、`medium`、`high` |
 | `metadata` | object | 否 | 扩展字段 |
+
+## 9. 纯文字导入
+
+`POST /api/copy/import` 现在支持两种输入，二选一：
+
+- `csv_text`：原有 CSV 导入。
+- `text`：纯文字导入，后端会把整段文字作为单条原文案调用 LLM 拆解并保存为文案资产。
+
+纯文字请求示例：
+
+```json
+{
+  "text": "先别急着换产品，可能是护肤顺序错了。"
+}
+```
+
+响应仍然是 `TaskResponse`，字段和 CSV 导入一致：
+
+```json
+{
+  "task_id": "task-id",
+  "status": "finished",
+  "result": {
+    "imported_count": 1,
+    "failed_count": 0,
+    "asset_ids": ["asset-id"]
+  },
+  "error": null,
+  "progress": {
+    "phase": "finished",
+    "model": "glm-5.1",
+    "current_row": 1,
+    "total_rows": 1,
+    "processed_count": 1,
+    "success_count": 1,
+    "failed_count": 0,
+    "percent": 100,
+    "current_message": "Plain text import finished.",
+    "errors": []
+  }
+}
+```
+
+前端约束：
+
+- `csv_text` 和 `text` 只能传一个。
+- `text` 不能为空字符串。
+- 导入完成后用 `result.asset_ids` 拉取 `/api/copy/assets/{asset_id}` 或刷新资产列表。
