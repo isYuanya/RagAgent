@@ -22,6 +22,7 @@ export function ImportProgress({ task }: { task: TaskResponse }) {
 
       <div className="flex flex-wrap gap-1.5 text-xs text-muted-foreground">
         <Stat label="模型" value={progress.model ?? "未配置"} />
+        <Stat label="当前行" value={progress.current_row} />
         <Stat
           label="行"
           value={`${progress.processed_count}/${progress.total_rows}`}

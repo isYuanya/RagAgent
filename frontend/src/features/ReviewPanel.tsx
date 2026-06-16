@@ -16,6 +16,7 @@ import {
   emptyAnalysis,
   type Analysis,
   type CopyAsset,
+  type RiskWarning,
   type ReviewStatus
 } from "@/lib/types";
 import { cn, formatFollowers, formatMetrics, splitLines } from "@/lib/utils";
@@ -41,10 +42,14 @@ export function ReviewPanel({
 }) {
   const [draft, setDraft] = React.useState<Analysis>(emptyAnalysis);
   const [status, setStatus] = React.useState<ReviewStatus>("pending_review");
+  const [riskText, setRiskText] = React.useState("");
 
   React.useEffect(() => {
     if (!asset) return;
-    setDraft(asset.reviewed_analysis ?? asset.auto_analysis ?? emptyAnalysis);
+    const nextDraft =
+      asset.reviewed_analysis ?? asset.auto_analysis ?? emptyAnalysis;
+    setDraft(nextDraft);
+    setRiskText(formatRiskWarnings(nextDraft.risk_warnings));
     setStatus((asset.status as ReviewStatus) ?? "pending_review");
   }, [asset?.id]);
 
@@ -57,6 +62,11 @@ export function ReviewPanel({
     if (nextStatus === "approved" || nextStatus === "rejected") {
       onSave(nextStatus, draft);
     }
+  }
+
+  function handleRiskWarningsChange(value: string) {
+    setRiskText(value);
+    update("risk_warnings", parseRiskWarnings(value));
   }
 
   if (!asset) {
@@ -89,7 +99,10 @@ export function ReviewPanel({
           <div className="flex flex-wrap gap-1.5 pt-1">
             <MetaPill>{asset.author_name ?? "未标作者"}</MetaPill>
             <MetaPill>{asset.platform ?? "未标平台"}</MetaPill>
+            <MetaPill>{asset.industry ?? "未标行业"}</MetaPill>
             <MetaPill>{asset.audience ?? "未标人群"}</MetaPill>
+            <MetaPill>{asset.purpose ?? "未标目的"}</MetaPill>
+            <MetaPill>{asset.style ?? "未标风格"}</MetaPill>
             <MetaPill>{formatFollowers(asset.author_follower_count)}</MetaPill>
             <MetaPill>{formatMetrics(asset.metrics)}</MetaPill>
           </div>
@@ -102,6 +115,17 @@ export function ReviewPanel({
             >
               <ExternalLink className="size-3.5" />
               作者主页
+            </a>
+          ) : null}
+          {asset.source_url ? (
+            <a
+              href={asset.source_url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex w-fit items-center gap-1 text-xs font-medium text-primary hover:underline"
+            >
+              <ExternalLink className="size-3.5" />
+              文案来源
             </a>
           ) : null}
         </section>
@@ -180,6 +204,16 @@ export function ReviewPanel({
           />
         </Field>
 
+        <Field label="风险提示（每行一条：级别｜提示｜建议）">
+          <Textarea
+            aria-label="风险提示"
+            value={riskText}
+            onChange={(e) => handleRiskWarningsChange(e.target.value)}
+            className="min-h-[100px]"
+            placeholder="medium｜可能涉及夸大承诺｜改成经验分享口吻"
+          />
+        </Field>
+
         <Field label={`置信度（${draft.confidence.toFixed(2)}）`}>
           <Input
             type="number"
@@ -193,6 +227,37 @@ export function ReviewPanel({
       </div>
     </div>
   );
+}
+
+function formatRiskWarnings(warnings: RiskWarning[]): string {
+  return warnings
+    .map((warning) => {
+      const parts = [warning.level, warning.message];
+      if (warning.suggestion) parts.push(warning.suggestion);
+      return parts.join("｜");
+    })
+    .join("\n");
+}
+
+function parseRiskWarnings(value: string): RiskWarning[] {
+  return splitLines(value).map((line) => {
+    const parts = line
+      .split(/[|｜]/)
+      .map((item) => item.trim());
+    if (parts.length === 1) {
+      return {
+        level: "medium",
+        message: parts[0],
+        suggestion: null
+      };
+    }
+    const [level = "medium", message = "", suggestion = ""] = parts;
+    return {
+      level: level || "medium",
+      message: message || line.trim(),
+      suggestion: suggestion || null
+    };
+  });
 }
 
 function MetaPill({ children }: { children: React.ReactNode }) {

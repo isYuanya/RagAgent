@@ -49,7 +49,7 @@ export function AssetList({
   const [filters, setFilters] = React.useState<Filters>({
     platform: ALL,
     industry: ALL,
-    status: ALL
+    status: "pending_review"
   });
 
   const platforms = React.useMemo(

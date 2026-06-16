@@ -19,6 +19,13 @@ import {
 } from "@/lib/api";
 import type { Analysis, CopyAsset, TaskProgress, TaskResponse } from "@/lib/types";
 
+function getFirstImportedAssetId(task: TaskResponse): string | null {
+  const assetIds = task.result?.asset_ids;
+  return Array.isArray(assetIds) && typeof assetIds[0] === "string"
+    ? assetIds[0]
+    : null;
+}
+
 export function App() {
   const [view, setView] = React.useState<AppView>("workbench");
   const [assets, setAssets] = React.useState<CopyAsset[]>([]);
@@ -33,11 +40,11 @@ export function App() {
 
   const selected = assets.find((asset) => asset.id === selectedId) ?? null;
 
-  const loadAssets = React.useCallback(async () => {
+  const loadAssets = React.useCallback(async (preferredId?: string | null) => {
     try {
       const items = await fetchAssets();
       setAssets(items);
-      setSelectedId((current) => current ?? items[0]?.id ?? null);
+      setSelectedId((current) => preferredId ?? current ?? items[0]?.id ?? null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "加载资产失败");
     } finally {
@@ -63,7 +70,7 @@ export function App() {
       if (payload.status === "finished") {
         setImporting(false);
         toast.success("导入完成");
-        void loadAssets();
+        void loadAssets(getFirstImportedAssetId(payload));
       }
       if (payload.status === "failed") {
         setImporting(false);
@@ -86,7 +93,7 @@ export function App() {
       if (task.status === "finished") {
         setImporting(false);
         toast.success("导入完成");
-        await loadAssets();
+        await loadAssets(getFirstImportedAssetId(task));
       } else {
         toast.message(task.progress?.current_message ?? "导入任务已创建");
       }
@@ -107,7 +114,7 @@ export function App() {
       if (task.status === "finished") {
         setImporting(false);
         toast.success("导入完成");
-        await loadAssets();
+        await loadAssets(getFirstImportedAssetId(task));
       } else {
         toast.message(task.progress?.current_message ?? "导入任务已创建");
       }

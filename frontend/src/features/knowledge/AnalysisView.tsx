@@ -20,7 +20,10 @@ export function AnalysisView({
           <div className="flex flex-wrap gap-1.5 pt-1">
             <MetaPill>{asset.author_name ?? "未标作者"}</MetaPill>
             <MetaPill>{asset.platform ?? "未标平台"}</MetaPill>
+            <MetaPill>{asset.industry ?? "未标行业"}</MetaPill>
             <MetaPill>{asset.audience ?? "未标人群"}</MetaPill>
+            <MetaPill>{asset.purpose ?? "未标目的"}</MetaPill>
+            <MetaPill>{asset.style ?? "未标风格"}</MetaPill>
             <MetaPill>{formatFollowers(asset.author_follower_count)}</MetaPill>
             <MetaPill>{formatMetrics(asset.metrics)}</MetaPill>
           </div>
@@ -32,6 +35,16 @@ export function AnalysisView({
               className="inline-flex w-fit items-center gap-1 text-xs font-medium text-primary hover:underline"
             >
               <ExternalLink className="size-3.5" /> 作者主页
+            </a>
+          ) : null}
+          {asset.source_url ? (
+            <a
+              href={asset.source_url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex w-fit items-center gap-1 text-xs font-medium text-primary hover:underline"
+            >
+              <ExternalLink className="size-3.5" /> 文案来源
             </a>
           ) : null}
         </section>
@@ -54,6 +67,31 @@ export function AnalysisView({
             <p className="whitespace-pre-wrap text-sm">
               {analysis.reusable_template || "—"}
             </p>
+          </Block>
+
+          <Block label="风险提示">
+            {analysis.risk_warnings.length > 0 ? (
+              <div className="space-y-2">
+                {analysis.risk_warnings.map((warning, index) => (
+                  <div
+                    key={`${warning.level}-${warning.message}-${index}`}
+                    className="rounded-md border border-border bg-muted/30 p-3 text-sm"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline">{warning.level}</Badge>
+                      <span>{warning.message || "—"}</span>
+                    </div>
+                    {warning.suggestion ? (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        建议：{warning.suggestion}
+                      </p>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">—</p>
+            )}
           </Block>
 
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
