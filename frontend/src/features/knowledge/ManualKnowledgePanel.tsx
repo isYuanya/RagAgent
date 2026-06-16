@@ -444,10 +444,19 @@ function DetailList({ label, items }: { label: string; items: string[] }) {
 
 function SourceDetail({ source }: { source?: SourceReference | null }) {
   if (!source) return <DetailBlock label="来源引用">未关联来源</DetailBlock>;
+  const sourceTypeLabel = source.source_type === "raw_copy" ? "原始文案" : "拆解记录";
   return (
     <DetailBlock label="来源引用">
-      {source.source_type === "raw_copy" ? "原始文案" : "拆解记录"} ·{" "}
-      {source.source_id}
+      <div className="space-y-1">
+        <div>
+          {sourceTypeLabel} · {source.source_display ?? source.source_id}
+        </div>
+        {source.source_display ? (
+          <div className="break-all text-xs text-muted-foreground">
+            {source.source_id}
+          </div>
+        ) : null}
+      </div>
     </DetailBlock>
   );
 }

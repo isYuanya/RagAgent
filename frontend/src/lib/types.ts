@@ -111,6 +111,7 @@ export type KnowledgeCollectionCreate = {
 export type SourceReference = {
   source_type: "raw_copy" | "analysis";
   source_id: string;
+  source_display?: string | null;
 };
 
 export type RawCopySummary = CopyAsset & {
