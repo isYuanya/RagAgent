@@ -105,3 +105,36 @@ Implemented copy import persistence review flow, added configurable LLM auto-app
 ### Next Steps
 
 - None - task complete
+
+
+## Session 4: System status monitoring API
+
+**Date**: 2026-06-16
+**Task**: System status monitoring API
+**Branch**: `master`
+
+### Summary
+
+Added backend system status endpoint for PostgreSQL, Redis, copy_import worker, and optional Milvus checks, plus frontend API documentation and tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2200135` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
