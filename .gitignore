@@ -7,5 +7,10 @@ __pycache__/
 .mypy_cache/
 storage/uploads/
 storage/indexes/
+storage/*.log
+storage/test_copy_assets.csv
 frontend/node_modules/
 frontend/dist/
+frontend/*.tsbuildinfo
+.idea/db-forest-config.xml
+.claude/settings.local.json
