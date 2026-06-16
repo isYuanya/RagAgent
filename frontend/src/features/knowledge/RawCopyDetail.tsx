@@ -1,4 +1,4 @@
-import { FolderPlus, ListTree, Trash2 } from "lucide-react";
+import { FolderPlus, ListTree, Loader2, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/features/StatusBadge";
@@ -9,11 +9,15 @@ export function RawCopyDetail({
   rawCopy,
   onEditCollections,
   onViewFragments,
+  onExtractFragments,
+  extractingFragments,
   onDelete
 }: {
   rawCopy: RawCopySummary;
   onEditCollections: () => void;
   onViewFragments: () => void;
+  onExtractFragments: () => void;
+  extractingFragments: boolean;
   onDelete: () => void;
 }) {
   const analysis = rawCopy.reviewed_analysis ?? rawCopy.auto_analysis ?? null;
@@ -26,6 +30,15 @@ export function RawCopyDetail({
           <StatusBadge status={rawCopy.status} />
         </div>
         <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onExtractFragments}
+            disabled={extractingFragments || rawCopy.status !== "approved"}
+          >
+            {extractingFragments ? <Loader2 className="animate-spin" /> : <Sparkles />}
+            生成片段
+          </Button>
           <Button size="sm" variant="outline" onClick={onViewFragments}>
             <ListTree /> 查看片段
           </Button>

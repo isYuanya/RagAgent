@@ -11,7 +11,11 @@ import {
   SelectValue
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { fetchRawCopies, deleteRawCopy } from "@/lib/api";
+import {
+  deleteRawCopy,
+  extractFragmentsForRawCopy,
+  fetchRawCopies
+} from "@/lib/api";
 import type { KnowledgeCollection, RawCopySummary } from "@/lib/types";
 import { StatusBadge } from "@/features/StatusBadge";
 import { EmptyState } from "@/features/shared/EmptyState";
@@ -35,6 +39,7 @@ export function RawCopiesPanel({
   const [editOpen, setEditOpen] = React.useState(false);
   const [deleting, setDeleting] = React.useState<RawCopySummary | null>(null);
   const [deleteBusy, setDeleteBusy] = React.useState(false);
+  const [extractingId, setExtractingId] = React.useState<string | null>(null);
 
   const selected = items.find((x) => x.id === selectedId) ?? null;
 
@@ -76,6 +81,25 @@ export function RawCopiesPanel({
       toast.error(error instanceof Error ? error.message : "删除失败");
     } finally {
       setDeleteBusy(false);
+    }
+  }
+
+  async function handleExtractFragments(rawCopy: RawCopySummary) {
+    setExtractingId(rawCopy.id);
+    try {
+      const result = await extractFragmentsForRawCopy(rawCopy.id);
+      if (result.status === "created") {
+        toast.success(`已生成 ${result.fragment_count} 条片段`);
+      } else if (result.status === "skipped") {
+        toast.info(result.message ?? "该文案已存在片段，已跳过生成");
+      } else {
+        toast.error(result.message ?? "生成片段失败");
+      }
+      onViewFragments(rawCopy.id);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "生成片段失败");
+    } finally {
+      setExtractingId(null);
     }
   }
 
@@ -150,6 +174,8 @@ export function RawCopiesPanel({
             rawCopy={selected}
             onEditCollections={() => setEditOpen(true)}
             onViewFragments={() => onViewFragments(selected.id)}
+            onExtractFragments={() => void handleExtractFragments(selected)}
+            extractingFragments={extractingId === selected.id}
             onDelete={() => setDeleting(selected)}
           />
         ) : (

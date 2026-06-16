@@ -9,6 +9,8 @@ import type {
   KnowledgeCaseCreate,
   KnowledgeCollection,
   KnowledgeCollectionCreate,
+  FragmentExtractionBatchResponse,
+  FragmentExtractionResult,
   KnowledgeFragment,
   KnowledgeFragmentCreate,
   KnowledgeTag,
@@ -325,6 +327,28 @@ export function createFragment(
   body: KnowledgeFragmentCreate
 ): Promise<KnowledgeFragment> {
   return writeJson(`${knowledgeBase}/fragments`, "POST", body, "创建片段失败");
+}
+
+export function extractFragmentsForRawCopy(
+  sourceCopyId: string
+): Promise<FragmentExtractionResult> {
+  return writeJson(
+    `${knowledgeBase}/fragments/extract/${sourceCopyId}`,
+    "POST",
+    {},
+    "生成片段失败"
+  );
+}
+
+export function extractApprovedFragments(
+  limit = 50
+): Promise<FragmentExtractionBatchResponse> {
+  return writeJson(
+    `${knowledgeBase}/fragments/extract-approved?limit=${limit}`,
+    "POST",
+    {},
+    "批量生成片段失败"
+  );
 }
 
 export function updateFragment(

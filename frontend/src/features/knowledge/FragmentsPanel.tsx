@@ -25,6 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   createFragment,
   deleteFragment,
+  extractApprovedFragments,
   fetchFragments,
   updateFragment
 } from "@/lib/api";
@@ -91,6 +92,7 @@ export function FragmentsPanel({ sourceCopyId }: { sourceCopyId?: string }) {
   const [editing, setEditing] = React.useState<KnowledgeFragment | null>(null);
   const [deleting, setDeleting] = React.useState<KnowledgeFragment | null>(null);
   const [deleteBusy, setDeleteBusy] = React.useState(false);
+  const [extractingApproved, setExtractingApproved] = React.useState(false);
 
   const selected = items.find((item) => item.id === selectedId) ?? null;
 
@@ -156,15 +158,41 @@ export function FragmentsPanel({ sourceCopyId }: { sourceCopyId?: string }) {
     }
   }
 
+  async function handleExtractApproved() {
+    setExtractingApproved(true);
+    try {
+      const result = await extractApprovedFragments();
+      toast.success(
+        `已处理 ${result.processed_count} 条，生成 ${result.created_count} 条，失败 ${result.failed_count} 条`
+      );
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "批量生成片段失败");
+    } finally {
+      setExtractingApproved(false);
+    }
+  }
+
   return (
     <div className="grid min-h-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(320px,420px)_1fr]">
       <Card className="flex min-h-0 flex-col overflow-hidden p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div className="text-sm font-semibold">片段库（{items.length}）</div>
-          <Button size="sm" onClick={openCreate}>
-            <Plus />
-            新建片段
-          </Button>
+          <div className="flex shrink-0 gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleExtractApproved}
+              disabled={extractingApproved}
+            >
+              {extractingApproved ? <Loader2 className="animate-spin" /> : null}
+              补生成
+            </Button>
+            <Button size="sm" onClick={openCreate}>
+              <Plus />
+              新建片段
+            </Button>
+          </div>
         </div>
 
         <div className="mb-3 space-y-2 rounded-lg border border-border bg-muted/20 p-3">

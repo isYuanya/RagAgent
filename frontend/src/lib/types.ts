@@ -229,6 +229,20 @@ export type FragmentFilters = {
   q?: string;
 };
 
+export type FragmentExtractionResult = {
+  source_copy_id: string;
+  status: "created" | "skipped" | "failed";
+  fragment_count: number;
+  message?: string | null;
+};
+
+export type FragmentExtractionBatchResponse = {
+  items: FragmentExtractionResult[];
+  processed_count: number;
+  created_count: number;
+  failed_count: number;
+};
+
 export const emptyAnalysis: Analysis = {
   topic: "",
   target_user: "",
