@@ -98,34 +98,19 @@ def list_copy_assets(
     industry: str | None = None,
     platform: str | None = None,
 ) -> CopyAssetListResponse:
-    db_response = _list_db_assets(
-        page=page,
-        page_size=page_size,
+    db_assets = _get_db_asset_items()
+    redis_assets = _get_redis_asset_items()
+    merged = _merge_asset_sources(
+        db_assets if db_assets is not None else [],
+        redis_assets if redis_assets is not None else [],
+        _copy_assets.values(),
+    )
+    filtered = _filter_assets(
+        merged,
         status=status,
         industry=industry,
         platform=platform,
     )
-    redis_response = _list_redis_assets(
-        page=page,
-        page_size=page_size,
-        status=status,
-        industry=industry,
-        platform=platform,
-    )
-    if db_response is not None and db_response.total > 0:
-        return db_response
-    if redis_response is not None:
-        return redis_response
-    if db_response is not None:
-        return db_response
-
-    filtered = [
-        asset
-        for asset in _copy_assets.values()
-        if (status is None or asset.status == status)
-        and (industry is None or asset.industry == industry)
-        and (platform is None or asset.platform == platform)
-    ]
     start = (page - 1) * page_size
     end = start + page_size
     return CopyAssetListResponse(
@@ -304,35 +289,16 @@ def _list_db_assets(
     industry: str | None,
     platform: str | None,
 ) -> CopyAssetListResponse | None:
-    if _db_available is False:
+    assets = _get_db_asset_items()
+    if assets is None:
         return None
-    db = SessionLocal()
-    try:
-        sources = db.scalars(select(CopySource).order_by(CopySource.created_at.desc())).all()
-        assets = [
-            _source_to_asset(db, source)
-            for source in sources
-            if not _is_deleted_metadata(source.metadata_json or {})
-        ]
-        filtered = [
-            asset
-            for asset in assets
-            if (status is None or asset.status == status)
-            and (industry is None or asset.industry == industry)
-            and (platform is None or asset.platform == platform)
-        ]
-        start = (page - 1) * page_size
-        return CopyAssetListResponse(
-            items=filtered[start : start + page_size],
-            page=page,
-            page_size=page_size,
-            total=len(filtered),
-        )
-    except SQLAlchemyError:
-        _mark_db_available(False)
-        return None
-    finally:
-        db.close()
+    filtered = _filter_assets(
+        assets,
+        status=status,
+        industry=industry,
+        platform=platform,
+    )
+    return _asset_list_response(filtered, page=page, page_size=page_size)
 
 
 def _get_db_asset(asset_id: str) -> CopyAssetSummary | None:
@@ -432,6 +398,34 @@ def _source_to_asset(db, source: CopySource) -> CopyAssetSummary:
     )
 
 
+def _merge_asset_sources(*sources) -> list[CopyAssetSummary]:
+    merged: list[CopyAssetSummary] = []
+    seen: set[str] = set()
+    for source in sources:
+        for asset in source:
+            if asset.id in seen:
+                continue
+            seen.add(asset.id)
+            merged.append(asset)
+    return merged
+
+
+def _filter_assets(
+    assets: list[CopyAssetSummary],
+    *,
+    status: str | None,
+    industry: str | None,
+    platform: str | None,
+) -> list[CopyAssetSummary]:
+    return [
+        asset
+        for asset in assets
+        if (status is None or asset.status == status)
+        and (industry is None or asset.industry == industry)
+        and (platform is None or asset.platform == platform)
+    ]
+
+
 def _asset_metadata(asset: CopyAssetSummary) -> dict:
     return {
         "platform": asset.platform,
@@ -488,6 +482,37 @@ def _list_redis_assets(
     industry: str | None,
     platform: str | None,
 ) -> CopyAssetListResponse | None:
+    assets = _get_redis_asset_items()
+    if assets is None:
+        return None
+    filtered = _filter_assets(
+        assets,
+        status=status,
+        industry=industry,
+        platform=platform,
+    )
+    return _asset_list_response(filtered, page=page, page_size=page_size)
+
+
+def _get_db_asset_items() -> list[CopyAssetSummary] | None:
+    if _db_available is False:
+        return None
+    db = SessionLocal()
+    try:
+        sources = db.scalars(select(CopySource).order_by(CopySource.created_at.desc())).all()
+        return [
+            _source_to_asset(db, source)
+            for source in sources
+            if not _is_deleted_metadata(source.metadata_json or {})
+        ]
+    except SQLAlchemyError:
+        _mark_db_available(False)
+        return None
+    finally:
+        db.close()
+
+
+def _get_redis_asset_items() -> list[CopyAssetSummary] | None:
     try:
         redis = _redis()
         ids = [item.decode("utf-8") for item in redis.lrange(_REDIS_ASSET_ORDER, 0, -1)]
@@ -495,24 +520,22 @@ def _list_redis_assets(
     except RedisError:
         return None
 
-    assets = [
+    return [
         CopyAssetSummary.model_validate(json.loads(raw))
         for raw in raw_assets
         if raw is not None
     ]
-    filtered = [
-        asset
-        for asset in assets
-        if (status is None or asset.status == status)
-        and (industry is None or asset.industry == industry)
-        and (platform is None or asset.platform == platform)
-    ]
+
+
+def _asset_list_response(
+    assets: list[CopyAssetSummary], *, page: int, page_size: int
+) -> CopyAssetListResponse:
     start = (page - 1) * page_size
     return CopyAssetListResponse(
-        items=filtered[start : start + page_size],
+        items=assets[start : start + page_size],
         page=page,
         page_size=page_size,
-        total=len(filtered),
+        total=len(assets),
     )
 
 

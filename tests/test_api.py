@@ -1,7 +1,8 @@
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.services.copy_assets import reset_copy_asset_store
+from app.schemas.copy import CopyAssetSummary
+from app.services.copy_assets import list_copy_assets, reset_copy_asset_store
 
 
 client = TestClient(app)
@@ -135,6 +136,34 @@ def test_import_plain_text_copy_asset(monkeypatch) -> None:
     item = list_response.json()["items"][0]
     assert item["source_text"] == "plain text copy"
     assert item["auto_analysis"]["confidence"] == 0.8
+
+
+def test_copy_asset_list_merges_db_and_redis_assets(monkeypatch) -> None:
+    reset_copy_asset_store()
+    db_asset = CopyAssetSummary(
+        id="11111111-1111-1111-1111-111111111111",
+        source_text="db copy",
+        status="pending_review",
+    )
+    redis_asset = CopyAssetSummary(
+        id="22222222-2222-2222-2222-222222222222",
+        source_text="redis copy",
+        status="pending_review",
+    )
+
+    monkeypatch.setattr(
+        "app.services.copy_assets._get_db_asset_items",
+        lambda: [db_asset],
+    )
+    monkeypatch.setattr(
+        "app.services.copy_assets._get_redis_asset_items",
+        lambda: [redis_asset],
+    )
+
+    response = list_copy_assets(status="pending_review")
+
+    assert response.total == 2
+    assert {item.id for item in response.items} == {db_asset.id, redis_asset.id}
 
 
 def test_delete_pending_review_copy_asset(monkeypatch) -> None:
