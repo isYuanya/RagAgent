@@ -239,3 +239,12 @@ CSV 必须包含表头 `source_text`。当前支持的列：
 | `source_quality` | `"unknown" \| "low" \| "medium" \| "high"` | 来源质量弱标签 |
 | `risk_level` | `"low" \| "medium" \| "high"` | 风险弱标签 |
 | `metadata` | `object` | 扩展字段 |
+
+### CopyAsset Delete
+
+用于 `DELETE /api/copy/assets/{asset_id}`。
+
+- 仅允许删除 `status = pending_review` 的资产。
+- 删除成功返回 `204`，响应体为空。
+- 资产不存在或已删除返回 `404`。
+- 资产已经审核通过或拒绝返回 `409`。

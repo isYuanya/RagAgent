@@ -137,6 +137,28 @@ def test_import_plain_text_copy_asset(monkeypatch) -> None:
     assert item["auto_analysis"]["confidence"] == 0.8
 
 
+def test_delete_pending_review_copy_asset(monkeypatch) -> None:
+    reset_copy_asset_store()
+    monkeypatch.setattr("app.services.copy_analysis.get_llm_client", lambda: FakeLLMClient())
+    monkeypatch.setattr("app.api.routes.copy.enqueue_text_import", lambda text: __import__(
+        "app.services.copy_import_jobs", fromlist=["run_text_import_task"]
+    ).run_text_import_task(text))
+
+    response = client.post("/api/copy/import", json={"text": "delete me"})
+    assert response.status_code == 200
+    asset_id = response.json()["result"]["asset_ids"][0]
+
+    delete_response = client.delete(f"/api/copy/assets/{asset_id}")
+    assert delete_response.status_code == 204
+
+    get_response = client.get(f"/api/copy/assets/{asset_id}")
+    assert get_response.status_code == 404
+
+    list_response = client.get("/api/copy/assets")
+    assert list_response.status_code == 200
+    assert all(item["id"] != asset_id for item in list_response.json()["items"])
+
+
 def test_import_requires_configured_llm(monkeypatch) -> None:
     reset_copy_asset_store()
 

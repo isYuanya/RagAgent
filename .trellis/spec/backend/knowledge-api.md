@@ -153,3 +153,11 @@ Fragment provenance and ordering are first-class fields so filtering and future 
 - Sending both `csv_text` and `text`, or neither, must fail request validation with `422`.
 - Plain text import returns the same `TaskResponse` shape as CSV import. On success, `result.asset_ids` contains one asset id and `progress.percent` is `100`.
 - Plain text import uses the same worker queue (`copy_import`) and same Redis fallback behavior as CSV import.
+
+## Copy Asset Delete Contract
+
+- `DELETE /api/copy/assets/{asset_id}` deletes imported copy assets that are still pending review.
+- Only `status = pending_review` assets may be deleted. Approved or rejected assets return `409`.
+- Successful delete returns `204`; subsequent asset detail requests return `404` and list endpoints omit the asset.
+- Database-backed delete is a soft delete using `copy_sources.metadata_json.deleted = true`.
+- Redis and in-memory fallbacks remove the asset id from the active cache/order.

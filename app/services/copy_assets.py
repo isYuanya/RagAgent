@@ -1,6 +1,7 @@
 import csv
 import json
 from io import StringIO
+from typing import Literal
 from uuid import uuid4
 
 from redis import Redis
@@ -145,6 +146,32 @@ def get_copy_asset(asset_id: str) -> CopyAssetSummary | None:
     return _copy_assets.get(asset_id)
 
 
+def delete_copy_asset(asset_id: str) -> Literal["deleted", "not_found", "conflict"]:
+    db_result = _delete_db_asset(asset_id)
+    if db_result == "deleted":
+        _delete_redis_asset(asset_id)
+        _copy_assets.pop(asset_id, None)
+        return "deleted"
+    if db_result == "conflict":
+        return "conflict"
+
+    redis_asset = _get_redis_asset(asset_id)
+    if redis_asset is not None:
+        if redis_asset.status != "pending_review":
+            return "conflict"
+        _delete_redis_asset(asset_id)
+        _copy_assets.pop(asset_id, None)
+        return "deleted"
+
+    asset = _copy_assets.get(asset_id)
+    if asset is None:
+        return "not_found"
+    if asset.status != "pending_review":
+        return "conflict"
+    _copy_assets.pop(asset_id, None)
+    return "deleted"
+
+
 def review_copy_asset(asset_id: str, payload: CopyAssetReviewRequest) -> CopyAssetSummary | None:
     db_asset = _review_db_asset(asset_id, payload)
     if db_asset is not None:
@@ -282,7 +309,11 @@ def _list_db_assets(
     db = SessionLocal()
     try:
         sources = db.scalars(select(CopySource).order_by(CopySource.created_at.desc())).all()
-        assets = [_source_to_asset(db, source) for source in sources]
+        assets = [
+            _source_to_asset(db, source)
+            for source in sources
+            if not _is_deleted_metadata(source.metadata_json or {})
+        ]
         filtered = [
             asset
             for asset in assets
@@ -310,7 +341,7 @@ def _get_db_asset(asset_id: str) -> CopyAssetSummary | None:
     db = SessionLocal()
     try:
         source = db.get(CopySource, asset_id)
-        if source is None:
+        if source is None or _is_deleted_metadata(source.metadata_json or {}):
             return None
         return _source_to_asset(db, source)
     except SQLAlchemyError:
@@ -326,7 +357,7 @@ def _review_db_asset(asset_id: str, payload: CopyAssetReviewRequest) -> CopyAsse
     db = SessionLocal()
     try:
         source = db.get(CopySource, asset_id)
-        if source is None:
+        if source is None or _is_deleted_metadata(source.metadata_json or {}):
             return None
         metadata = dict(source.metadata_json or {})
         metadata["status"] = payload.status
@@ -335,6 +366,30 @@ def _review_db_asset(asset_id: str, payload: CopyAssetReviewRequest) -> CopyAsse
         db.commit()
         db.refresh(source)
         return _source_to_asset(db, source)
+    except SQLAlchemyError:
+        _mark_db_available(False)
+        db.rollback()
+        return None
+    finally:
+        db.close()
+
+
+def _delete_db_asset(asset_id: str) -> Literal["deleted", "not_found", "conflict"] | None:
+    if _db_available is False:
+        return None
+    db = SessionLocal()
+    try:
+        source = db.get(CopySource, asset_id)
+        if source is None or _is_deleted_metadata(source.metadata_json or {}):
+            return "not_found"
+        asset = _source_to_asset(db, source)
+        if asset.status != "pending_review":
+            return "conflict"
+        metadata = dict(source.metadata_json or {})
+        metadata["deleted"] = True
+        source.metadata_json = metadata
+        db.commit()
+        return "deleted"
     except SQLAlchemyError:
         _mark_db_available(False)
         db.rollback()
@@ -392,6 +447,7 @@ def _asset_metadata(asset: CopyAssetSummary) -> dict:
         "reviewed_analysis": asset.reviewed_analysis.model_dump(mode="json")
         if asset.reviewed_analysis
         else None,
+        "deleted": False,
     }
 
 
@@ -472,6 +528,19 @@ def _review_redis_asset(asset_id: str, payload: CopyAssetReviewRequest) -> CopyA
     )
     _save_redis_asset(updated)
     return updated
+
+
+def _delete_redis_asset(asset_id: str) -> None:
+    try:
+        redis = _redis()
+        redis.hdel(_REDIS_ASSET_HASH, asset_id)
+        redis.lrem(_REDIS_ASSET_ORDER, 0, asset_id)
+    except RedisError:
+        pass
+
+
+def _is_deleted_metadata(metadata: dict) -> bool:
+    return metadata.get("deleted") is True
 
 
 def _blank_to_none(value: str | None) -> str | None:

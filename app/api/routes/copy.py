@@ -10,6 +10,7 @@ from app.schemas.copy import (
 )
 from app.schemas.task import TaskResponse
 from app.services.copy_assets import (
+    delete_copy_asset,
     get_copy_asset,
     list_copy_assets,
     review_copy_asset,
@@ -66,6 +67,15 @@ def review_asset(asset_id: str, payload: CopyAssetReviewRequest) -> CopyAssetSum
     if asset is None:
         raise HTTPException(status_code=404, detail="Copy asset not found")
     return asset
+
+
+@router.delete("/assets/{asset_id}", status_code=204)
+def delete_asset(asset_id: str) -> None:
+    result = delete_copy_asset(asset_id)
+    if result == "not_found":
+        raise HTTPException(status_code=404, detail="Copy asset not found")
+    if result == "conflict":
+        raise HTTPException(status_code=409, detail="Only pending_review assets can be deleted")
 
 
 def _llm_http_error(exc: RuntimeError) -> HTTPException:

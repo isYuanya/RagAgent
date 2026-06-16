@@ -563,3 +563,27 @@ GET /api/knowledge/fragments?fragment_role=hook&position=opening&industry=beauty
 - `csv_text` 和 `text` 只能传一个。
 - `text` 不能为空字符串。
 - 导入完成后用 `result.asset_ids` 拉取 `/api/copy/assets/{asset_id}` 或刷新资产列表。
+
+## 10. 待审核文案删除
+
+导入后的文案资产可以通过以下接口删除：
+
+```text
+DELETE /api/copy/assets/{asset_id}
+```
+
+当前只允许删除 `status === "pending_review"` 的资产；已审核通过或已拒绝的资产不会被删除。
+
+响应规则：
+
+| 状态码 | 含义 |
+| --- | --- |
+| `204` | 删除成功；后续列表和详情不再返回该资产 |
+| `404` | 资产不存在，或已经被删除 |
+| `409` | 资产不是 `pending_review`，不能删除 |
+
+前端建议：
+
+- 只在待审核列表中展示删除按钮。
+- 删除成功后从当前列表中移除该项，或刷新 `/api/copy/assets?status=pending_review`。
+- 如果收到 `409`，提示用户该文案状态已变化，需要刷新列表。
