@@ -9,10 +9,13 @@ import type {
   KnowledgeCaseCreate,
   KnowledgeCollection,
   KnowledgeCollectionCreate,
+  KnowledgeFragment,
+  KnowledgeFragmentCreate,
   KnowledgeTag,
   KnowledgeTagCreate,
   KnowledgeTemplate,
   KnowledgeTemplateCreate,
+  FragmentFilters,
   ListResponse,
   RawCopySummary,
   TaskResponse
@@ -47,6 +50,19 @@ export async function importCsv(csvText: string): Promise<TaskResponse> {
   const payload = await parseJson(response);
   if (!response.ok) {
     throw new Error((payload?.detail as string) ?? "导入失败");
+  }
+  return payload as TaskResponse;
+}
+
+export async function importText(text: string): Promise<TaskResponse> {
+  const response = await fetch(`${apiBase}/api/copy/import`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text })
+  });
+  const payload = await parseJson(response);
+  if (!response.ok) {
+    throw new Error((payload?.detail as string) ?? "导入文本失败");
   }
   return payload as TaskResponse;
 }
@@ -282,4 +298,35 @@ export function updateBlock(
 
 export function deleteBlock(id: string): Promise<void> {
   return deleteResource(`${knowledgeBase}/blocks/${id}`, "删除禁用项失败");
+}
+// fragments
+
+export async function fetchFragments(
+  filters: FragmentFilters = {}
+): Promise<KnowledgeFragment[]> {
+  const params = new URLSearchParams({ page: "1", page_size: "100" });
+  for (const [key, value] of Object.entries(filters)) {
+    if (value) params.set(key, value);
+  }
+  const response = await fetch(`${knowledgeBase}/fragments?${params}`);
+  if (!response.ok) throw new Error("加载片段库失败");
+  const payload = (await response.json()) as ListResponse<KnowledgeFragment>;
+  return payload.items;
+}
+
+export function createFragment(
+  body: KnowledgeFragmentCreate
+): Promise<KnowledgeFragment> {
+  return writeJson(`${knowledgeBase}/fragments`, "POST", body, "创建片段失败");
+}
+
+export function updateFragment(
+  id: string,
+  body: Partial<KnowledgeFragmentCreate>
+): Promise<KnowledgeFragment> {
+  return writeJson(`${knowledgeBase}/fragments/${id}`, "PATCH", body, "更新片段失败");
+}
+
+export function deleteFragment(id: string): Promise<void> {
+  return deleteResource(`${knowledgeBase}/fragments/${id}`, "删除片段失败");
 }

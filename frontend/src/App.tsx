@@ -2,6 +2,7 @@ import * as React from "react";
 import { toast } from "sonner";
 import { Sidebar, type AppView } from "@/features/Sidebar";
 import { CsvUpload } from "@/features/CsvUpload";
+import { TextImportDialog } from "@/features/TextImportDialog";
 import { ImportProgress, ImportErrors } from "@/features/ImportProgress";
 import { AssetList } from "@/features/AssetList";
 import { ReviewPanel } from "@/features/ReviewPanel";
@@ -13,6 +14,7 @@ import {
   fetchAssets,
   fetchTask,
   importCsv,
+  importText,
   saveReview
 } from "@/lib/api";
 import type { Analysis, CopyAsset, TaskProgress, TaskResponse } from "@/lib/types";
@@ -94,6 +96,27 @@ export function App() {
     }
   }
 
+  async function handleTextImport(text: string) {
+    setImporting(true);
+    setImportTask(null);
+    setErrors([]);
+    try {
+      const task = await importText(text);
+      setImportTask(task);
+      setErrors(task.progress?.errors ?? []);
+      if (task.status === "finished") {
+        setImporting(false);
+        toast.success("导入完成");
+        await loadAssets();
+      } else {
+        toast.message(task.progress?.current_message ?? "导入任务已创建");
+      }
+    } catch (error) {
+      setImporting(false);
+      toast.error(error instanceof Error ? error.message : "导入失败");
+    }
+  }
+
   async function handleSave(status: string, draft: Analysis) {
     if (!selected) return;
     setSaving(true);
@@ -148,11 +171,18 @@ export function App() {
                 批量导入样本文案，校正拆解结果，沉淀为可检索的文案资产。
               </p>
             </div>
-            <CsvUpload
-              busy={importing}
-              disabled={importing || saving}
-              onFile={handleUpload}
-            />
+            <div className="flex shrink-0 items-center gap-2">
+              <TextImportDialog
+                busy={importing}
+                disabled={importing || saving}
+                onSubmit={handleTextImport}
+              />
+              <CsvUpload
+                busy={importing}
+                disabled={importing || saving}
+                onFile={handleUpload}
+              />
+            </div>
           </header>
 
           <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 p-6 lg:grid-cols-[minmax(320px,420px)_1fr]">

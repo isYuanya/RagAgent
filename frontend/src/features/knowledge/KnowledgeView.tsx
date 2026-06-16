@@ -7,6 +7,7 @@ import { CollectionsPanel } from "./CollectionsPanel";
 import { RawCopiesPanel } from "./RawCopiesPanel";
 import { AnalysesPanel } from "./AnalysesPanel";
 import { ManualKnowledgePanel } from "./ManualKnowledgePanel";
+import { FragmentsPanel } from "./FragmentsPanel";
 
 type KbTab =
   | "collections"
@@ -15,7 +16,8 @@ type KbTab =
   | "templates"
   | "tags"
   | "cases"
-  | "blocks";
+  | "blocks"
+  | "fragments";
 
 const TABS: Array<{ key: KbTab; label: string }> = [
   { key: "collections", label: "集合" },
@@ -24,7 +26,8 @@ const TABS: Array<{ key: KbTab; label: string }> = [
   { key: "templates", label: "模板库" },
   { key: "tags", label: "标签库" },
   { key: "cases", label: "案例库" },
-  { key: "blocks", label: "禁用库" }
+  { key: "blocks", label: "禁用库" },
+  { key: "fragments", label: "片段库" }
 ];
 
 export function KnowledgeView() {
@@ -87,6 +90,8 @@ export function KnowledgeView() {
           <RawCopiesPanel collections={collections} />
         ) : tab === "analyses" ? (
           <AnalysesPanel />
+        ) : tab === "fragments" ? (
+          <FragmentsPanel />
         ) : (
           <ManualKnowledgePanel kind={tab} />
         )}

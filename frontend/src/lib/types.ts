@@ -168,6 +168,36 @@ export type KnowledgeBlock = {
 
 export type KnowledgeBlockCreate = Omit<KnowledgeBlock, "id">;
 
+export type FragmentQuality = "unknown" | "low" | "medium" | "high";
+export type FragmentRiskLevel = "low" | "medium" | "high";
+
+export type KnowledgeFragment = {
+  id: string;
+  source_copy_id: string;
+  analysis_id?: string | null;
+  sequence_order: number;
+  previous_fragment?: string | null;
+  next_fragment?: string | null;
+  before_context?: string | null;
+  after_context?: string | null;
+  fragment_text: string;
+  fragment_role: string;
+  position: string;
+  industry?: string | null;
+  source_quality: FragmentQuality;
+  risk_level: FragmentRiskLevel;
+  metadata: Record<string, unknown>;
+};
+
+export type KnowledgeFragmentCreate = Omit<KnowledgeFragment, "id">;
+
+export type FragmentFilters = {
+  source_copy_id?: string;
+  fragment_role?: string;
+  position?: string;
+  industry?: string;
+};
+
 export const emptyAnalysis: Analysis = {
   topic: "",
   target_user: "",
