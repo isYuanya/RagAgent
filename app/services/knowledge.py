@@ -508,14 +508,17 @@ def _to_raw_summary(raw_copy_id: str) -> RawCopySummary | None:
     collection_ids = _db_get_raw_collection_ids(raw_copy_id)
     if collection_ids is None:
         collection_ids = _store.raw_collection_ids.get(raw_copy_id, [])
+    if not collection_ids:
+        collection_ids = asset.collection_ids
     collections = [
         collection
         for collection_id in collection_ids
         if (collection := get_collection(collection_id)) is not None
     ]
+    data = asset.model_dump()
+    data["collection_ids"] = collection_ids
     return RawCopySummary(
-        **asset.model_dump(),
-        collection_ids=collection_ids,
+        **data,
         collections=collections,
     )
 
@@ -1113,6 +1116,9 @@ def _raw_has_collection(raw_copy_id: str, collection_id: str) -> bool:
     collection_ids = _db_get_raw_collection_ids(raw_copy_id)
     if collection_ids is None:
         collection_ids = _store.raw_collection_ids.get(raw_copy_id, [])
+    if not collection_ids:
+        asset = get_copy_asset(raw_copy_id)
+        collection_ids = asset.collection_ids if asset is not None else []
     return collection_id in collection_ids
 
 

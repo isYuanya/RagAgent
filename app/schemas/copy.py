@@ -16,17 +16,17 @@ class CopyAnalysisRequest(CopyContext):
 
 
 class CopyAnalysisResponse(BaseModel):
-    topic: str = Field(description="文案主题，这条内容主要讲什么。")
-    target_user: str = Field(description="目标用户，内容说给谁听。")
-    core_pain: str = Field(description="核心痛点，用户为什么会停留或行动。")
-    emotion_buttons: list[str] = Field(description="情绪按钮，例如好奇、共鸣、危机感。")
-    hook: str = Field(description="开头钩子，用于抓住注意力的一句话。")
-    structure: list[str] = Field(description="内容结构步骤，例如提出问题、放大痛点、给出观点。")
-    expression_skills: list[str] = Field(description="表达技巧，例如短句、反问、对比、数字化表达。")
+    topic: str = Field(description="文案主题。")
+    target_user: str = Field(description="目标用户。")
+    core_pain: str = Field(description="核心痛点。")
+    emotion_buttons: list[str] = Field(description="情绪按钮。")
+    hook: str = Field(description="开头钩子。")
+    structure: list[str] = Field(description="内容结构步骤。")
+    expression_skills: list[str] = Field(description="表达技巧。")
     reusable_template: str = Field(description="可复用的文案模板或句式。")
-    suitable_scenarios: list[str] = Field(description="适用场景，例如直播引流、私域成交、课程种草。")
+    suitable_scenarios: list[str] = Field(description="适用场景。")
     risk_warnings: list[RiskWarning] = Field(description="风险提示列表。")
-    confidence: float = Field(ge=0, le=1, description="拆解结果置信度，范围为0到1。")
+    confidence: float = Field(ge=0, le=1, description="拆解结果置信度，范围 0 到 1。")
 
 
 class _LegacyCopyImportRequest(BaseModel):
@@ -41,6 +41,7 @@ class CopyImportRowError(BaseModel):
 class CopyImportRequest(BaseModel):
     csv_text: str | None = Field(default=None, min_length=1)
     text: str | None = Field(default=None, min_length=1)
+    collection_ids: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def require_one_import_source(self) -> "CopyImportRequest":
@@ -60,6 +61,8 @@ class CopyAssetSummary(CopyContext):
     status: str = Field(description="审核状态，例如 pending_review、approved、rejected。")
     auto_analysis: CopyAnalysisResponse | None = None
     reviewed_analysis: CopyAnalysisResponse | None = None
+    storage_backend: str = Field(default="memory", description="当前资产来源：postgres、redis 或 memory。")
+    collection_ids: list[str] = Field(default_factory=list)
 
 
 class CopyAssetListResponse(BaseModel):

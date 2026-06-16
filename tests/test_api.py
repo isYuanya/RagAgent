@@ -25,6 +25,23 @@ class FakeLLMClient:
         }"""
 
 
+class HighConfidenceLLMClient:
+    def complete(self, prompt: str) -> str:
+        return """{
+            "topic": "skin care order",
+            "target_user": "new skin care users",
+            "core_pain": "routine has no effect",
+            "emotion_buttons": ["curiosity"],
+            "hook": "Check your routine before changing products.",
+            "structure": ["raise problem", "give advice"],
+            "expression_skills": ["short sentences"],
+            "reusable_template": "If you feel ___, check ___ first.",
+            "suitable_scenarios": ["education"],
+            "risk_warnings": [],
+            "confidence": 0.92
+        }"""
+
+
 def test_health_check() -> None:
     response = client.get("/api/health")
     assert response.status_code == 200
@@ -63,9 +80,9 @@ def test_copy_analyze_endpoint(monkeypatch) -> None:
 def test_import_and_review_copy_asset(monkeypatch) -> None:
     reset_copy_asset_store()
     monkeypatch.setattr("app.services.copy_analysis.get_llm_client", lambda: FakeLLMClient())
-    monkeypatch.setattr("app.api.routes.copy.enqueue_copy_import", lambda csv_text: __import__(
+    monkeypatch.setattr("app.api.routes.copy.enqueue_copy_import", lambda csv_text, collection_ids=None: __import__(
         "app.services.copy_import_jobs", fromlist=["run_copy_import_task"]
-    ).run_copy_import_task(csv_text))
+    ).run_copy_import_task(csv_text, collection_ids=collection_ids or []))
 
     response = client.post(
         "/api/copy/import",
@@ -82,12 +99,14 @@ def test_import_and_review_copy_asset(monkeypatch) -> None:
     assert task_payload["task_id"]
     assert task_payload["progress"]["model"]
     assert task_payload["progress"]["percent"] == 100
+    assert task_payload["result"]["storage_backends"]
 
     list_response = client.get("/api/copy/assets")
     assert list_response.status_code == 200
     assert list_response.json()["total"] == 1
     assert list_response.json()["items"][0]["author_name"] == "护肤研究员"
     assert list_response.json()["items"][0]["author_follower_count"] == 52000
+    assert list_response.json()["items"][0]["storage_backend"] in {"postgres", "redis", "memory"}
     asset_id = list_response.json()["items"][0]["id"]
 
     review_response = client.patch(
@@ -118,9 +137,9 @@ def test_import_and_review_copy_asset(monkeypatch) -> None:
 def test_import_plain_text_copy_asset(monkeypatch) -> None:
     reset_copy_asset_store()
     monkeypatch.setattr("app.services.copy_analysis.get_llm_client", lambda: FakeLLMClient())
-    monkeypatch.setattr("app.api.routes.copy.enqueue_text_import", lambda text: __import__(
+    monkeypatch.setattr("app.api.routes.copy.enqueue_text_import", lambda text, collection_ids=None: __import__(
         "app.services.copy_import_jobs", fromlist=["run_text_import_task"]
-    ).run_text_import_task(text))
+    ).run_text_import_task(text, collection_ids=collection_ids or []))
 
     response = client.post(
         "/api/copy/import",
@@ -129,6 +148,7 @@ def test_import_plain_text_copy_asset(monkeypatch) -> None:
 
     assert response.status_code == 200
     assert response.json()["progress"]["percent"] == 100
+    assert response.json()["result"]["storage_backends"]
 
     list_response = client.get("/api/copy/assets")
     assert list_response.status_code == 200
@@ -136,6 +156,49 @@ def test_import_plain_text_copy_asset(monkeypatch) -> None:
     item = list_response.json()["items"][0]
     assert item["source_text"] == "plain text copy"
     assert item["auto_analysis"]["confidence"] == 0.8
+    assert item["storage_backend"] in {"postgres", "redis", "memory"}
+
+
+def test_import_csv_accepts_utf8_bom(monkeypatch) -> None:
+    reset_copy_asset_store()
+    monkeypatch.setattr("app.services.copy_analysis.get_llm_client", lambda: FakeLLMClient())
+    monkeypatch.setattr("app.api.routes.copy.enqueue_copy_import", lambda csv_text, collection_ids=None: __import__(
+        "app.services.copy_import_jobs", fromlist=["run_copy_import_task"]
+    ).run_copy_import_task(csv_text, collection_ids=collection_ids or []))
+
+    response = client.post(
+        "/api/copy/import",
+        json={"csv_text": "\ufeffsource_text,platform\nbom copy,xiaohongshu\n"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "finished"
+    assert response.json()["result"]["imported_count"] == 1
+
+    list_response = client.get("/api/copy/assets")
+    assert list_response.status_code == 200
+    assert list_response.json()["total"] == 1
+    assert list_response.json()["items"][0]["source_text"] == "bom copy"
+
+
+def test_high_confidence_import_is_auto_approved(monkeypatch) -> None:
+    reset_copy_asset_store()
+    monkeypatch.setattr("app.services.copy_analysis.get_llm_client", lambda: HighConfidenceLLMClient())
+    monkeypatch.setattr("app.api.routes.copy.enqueue_text_import", lambda text, collection_ids=None: __import__(
+        "app.services.copy_import_jobs", fromlist=["run_text_import_task"]
+    ).run_text_import_task(text, collection_ids=collection_ids or []))
+
+    response = client.post("/api/copy/import", json={"text": "auto approve me"})
+
+    assert response.status_code == 200
+    asset_id = response.json()["result"]["asset_ids"][0]
+
+    asset_response = client.get(f"/api/copy/assets/{asset_id}")
+    assert asset_response.status_code == 200
+    assert asset_response.json()["status"] == "approved"
+
+    delete_response = client.delete(f"/api/copy/assets/{asset_id}")
+    assert delete_response.status_code == 409
 
 
 def test_copy_asset_list_merges_db_and_redis_assets(monkeypatch) -> None:
@@ -169,9 +232,9 @@ def test_copy_asset_list_merges_db_and_redis_assets(monkeypatch) -> None:
 def test_delete_pending_review_copy_asset(monkeypatch) -> None:
     reset_copy_asset_store()
     monkeypatch.setattr("app.services.copy_analysis.get_llm_client", lambda: FakeLLMClient())
-    monkeypatch.setattr("app.api.routes.copy.enqueue_text_import", lambda text: __import__(
+    monkeypatch.setattr("app.api.routes.copy.enqueue_text_import", lambda text, collection_ids=None: __import__(
         "app.services.copy_import_jobs", fromlist=["run_text_import_task"]
-    ).run_text_import_task(text))
+    ).run_text_import_task(text, collection_ids=collection_ids or []))
 
     response = client.post("/api/copy/import", json={"text": "delete me"})
     assert response.status_code == 200
@@ -195,9 +258,9 @@ def test_import_requires_configured_llm(monkeypatch) -> None:
         raise RuntimeError("OPENAI_API_KEY is not configured")
 
     monkeypatch.setattr("app.services.copy_analysis.get_llm_client", raise_config_error)
-    monkeypatch.setattr("app.api.routes.copy.enqueue_copy_import", lambda csv_text: __import__(
+    monkeypatch.setattr("app.api.routes.copy.enqueue_copy_import", lambda csv_text, collection_ids=None: __import__(
         "app.services.copy_import_jobs", fromlist=["run_copy_import_task"]
-    ).run_copy_import_task(csv_text))
+    ).run_copy_import_task(csv_text, collection_ids=collection_ids or []))
 
     response = client.post(
         "/api/copy/import",

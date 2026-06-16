@@ -12,6 +12,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.core.config import settings
 from app.db.session import SessionLocal
 from app.models.copy import CopyAnalysis, CopySource
+from app.models.knowledge import KnowledgeCollection, copy_source_collections
 from app.schemas.copy import (
     CopyAnalysisRequest,
     CopyAnalysisResponse,
@@ -46,11 +47,11 @@ def reset_copy_asset_store() -> None:
 
 
 def import_copy_assets(csv_text: str) -> CopyImportResponse:
-    reader = csv.DictReader(StringIO(csv_text))
+    fieldnames, rows = read_copy_import_csv(csv_text)
     errors: list[CopyImportRowError] = []
     assets: list[CopyAssetSummary] = []
 
-    if not reader.fieldnames or "source_text" not in reader.fieldnames:
+    if not fieldnames or "source_text" not in fieldnames:
         return CopyImportResponse(
             imported_count=0,
             failed_count=1,
@@ -58,7 +59,6 @@ def import_copy_assets(csv_text: str) -> CopyImportResponse:
             errors=[CopyImportRowError(row_number=1, message="CSV 必须包含 source_text 表头。")],
         )
 
-    rows = list(reader)
     if len(rows) > MAX_SYNC_IMPORT_ROWS:
         return CopyImportResponse(
             imported_count=0,
@@ -97,6 +97,7 @@ def list_copy_assets(
     status: str | None = None,
     industry: str | None = None,
     platform: str | None = None,
+    collection_id: str | None = None,
 ) -> CopyAssetListResponse:
     db_assets = _get_db_asset_items()
     redis_assets = _get_redis_asset_items()
@@ -110,6 +111,7 @@ def list_copy_assets(
         status=status,
         industry=industry,
         platform=platform,
+        collection_id=collection_id,
     )
     start = (page - 1) * page_size
     end = start + page_size
@@ -224,10 +226,20 @@ def parse_copy_import_row(
     )
 
 
+def read_copy_import_csv(csv_text: str) -> tuple[list[str] | None, list[dict[str, str | None]]]:
+    reader = csv.DictReader(StringIO(csv_text))
+    if reader.fieldnames is not None:
+        reader.fieldnames = [_normalize_csv_header(field) for field in reader.fieldnames]
+    return reader.fieldnames, list(reader)
+
+
 def create_copy_asset(
-    payload: CopyAnalysisRequest, analysis: CopyAnalysisResponse | None
+    payload: CopyAnalysisRequest,
+    analysis: CopyAnalysisResponse | None,
+    collection_ids: list[str] | None = None,
 ) -> CopyAssetSummary:
     asset_id = str(uuid4())
+    status = _initial_asset_status(analysis)
     asset = CopyAssetSummary(
         id=asset_id,
         source_text=payload.source_text,
@@ -241,19 +253,22 @@ def create_copy_asset(
         purpose=payload.purpose,
         style=payload.style,
         metrics=payload.metrics or {},
-        status="pending_review",
+        status=status,
         auto_analysis=analysis,
         reviewed_analysis=None,
+        collection_ids=collection_ids or [],
     )
+    db_persisted = _persist_asset_to_db(asset, collection_ids or [])
+    if db_persisted:
+        asset = asset.model_copy(update={"storage_backend": "postgres"})
     _copy_assets[asset.id] = asset
     _save_redis_asset(asset)
-    _persist_asset_to_db(asset)
     return asset
 
 
-def _persist_asset_to_db(asset: CopyAssetSummary) -> None:
+def _persist_asset_to_db(asset: CopyAssetSummary, collection_ids: list[str]) -> bool:
     if _db_available is False:
-        return
+        return False
     db = SessionLocal()
     try:
         db.add(
@@ -272,11 +287,22 @@ def _persist_asset_to_db(asset: CopyAssetSummary) -> None:
                     confidence=asset.auto_analysis.confidence,
                 )
             )
+        valid_collection_ids = _valid_db_collection_ids(db, collection_ids)
+        if valid_collection_ids:
+            db.execute(
+                copy_source_collections.insert(),
+                [
+                    {"copy_source_id": asset.id, "collection_id": collection_id}
+                    for collection_id in valid_collection_ids
+                ],
+            )
         db.commit()
         _mark_db_available(True)
+        return True
     except SQLAlchemyError:
         _mark_db_available(False)
         db.rollback()
+        return False
     finally:
         db.close()
 
@@ -288,6 +314,7 @@ def _list_db_assets(
     status: str | None,
     industry: str | None,
     platform: str | None,
+    collection_id: str | None = None,
 ) -> CopyAssetListResponse | None:
     assets = _get_db_asset_items()
     if assets is None:
@@ -297,6 +324,7 @@ def _list_db_assets(
         status=status,
         industry=industry,
         platform=platform,
+        collection_id=collection_id,
     )
     return _asset_list_response(filtered, page=page, page_size=page_size)
 
@@ -377,6 +405,7 @@ def _source_to_asset(db, source: CopySource) -> CopyAssetSummary:
         else None
     )
     reviewed_raw = metadata.get("reviewed_analysis")
+    collection_ids = _get_db_collection_ids(db, str(source.id))
     return CopyAssetSummary(
         id=str(source.id),
         source_text=source.source_text,
@@ -395,6 +424,8 @@ def _source_to_asset(db, source: CopySource) -> CopyAssetSummary:
         reviewed_analysis=CopyAnalysisResponse.model_validate(reviewed_raw)
         if isinstance(reviewed_raw, dict)
         else None,
+        storage_backend="postgres",
+        collection_ids=collection_ids,
     )
 
 
@@ -416,6 +447,7 @@ def _filter_assets(
     status: str | None,
     industry: str | None,
     platform: str | None,
+    collection_id: str | None,
 ) -> list[CopyAssetSummary]:
     return [
         asset
@@ -423,6 +455,7 @@ def _filter_assets(
         if (status is None or asset.status == status)
         and (industry is None or asset.industry == industry)
         and (platform is None or asset.platform == platform)
+        and (collection_id is None or collection_id in asset.collection_ids)
     ]
 
 
@@ -441,13 +474,47 @@ def _asset_metadata(asset: CopyAssetSummary) -> dict:
         "reviewed_analysis": asset.reviewed_analysis.model_dump(mode="json")
         if asset.reviewed_analysis
         else None,
+        "collection_ids": asset.collection_ids,
         "deleted": False,
     }
+
+
+def _valid_db_collection_ids(db, collection_ids: list[str]) -> list[str]:
+    if not collection_ids:
+        return []
+    rows = db.scalars(
+        select(KnowledgeCollection.id).where(
+            KnowledgeCollection.id.in_(collection_ids),
+            KnowledgeCollection.is_deleted.is_(False),
+        )
+    ).all()
+    return [str(row) for row in rows]
+
+
+def _get_db_collection_ids(db, copy_source_id: str) -> list[str]:
+    rows = db.execute(
+        select(copy_source_collections.c.collection_id).where(
+            copy_source_collections.c.copy_source_id == copy_source_id
+        )
+    ).all()
+    return [str(row[0]) for row in rows]
 
 
 def _mark_db_available(value: bool) -> None:
     global _db_available
     _db_available = value
+
+
+def _normalize_csv_header(value: str | None) -> str:
+    return (value or "").lstrip("\ufeff").strip()
+
+
+def _initial_asset_status(analysis: CopyAnalysisResponse | None) -> str:
+    if analysis is None:
+        return "pending_review"
+    if analysis.confidence >= settings.copy_auto_approve_min_confidence:
+        return "approved"
+    return "pending_review"
 
 
 def _redis() -> Redis:
@@ -481,6 +548,7 @@ def _list_redis_assets(
     status: str | None,
     industry: str | None,
     platform: str | None,
+    collection_id: str | None = None,
 ) -> CopyAssetListResponse | None:
     assets = _get_redis_asset_items()
     if assets is None:
@@ -490,6 +558,7 @@ def _list_redis_assets(
         status=status,
         industry=industry,
         platform=platform,
+        collection_id=collection_id,
     )
     return _asset_list_response(filtered, page=page, page_size=page_size)
 

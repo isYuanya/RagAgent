@@ -1,15 +1,13 @@
-import csv
-from io import StringIO
-
 from app.core.config import settings
 from app.schemas.copy import CopyAnalysisRequest, CopyAssetSummary, CopyImportRowError
 from app.schemas.task import TaskProgress, TaskResponse
+from app.services.copy_analysis import analyze_copy
 from app.services.copy_assets import (
     MAX_SYNC_IMPORT_ROWS,
     create_copy_asset,
     parse_copy_import_row,
+    read_copy_import_csv,
 )
-from app.services.copy_analysis import analyze_copy
 from app.workers.tasks import (
     create_task,
     set_task_failed,
@@ -19,7 +17,9 @@ from app.workers.tasks import (
 )
 
 
-def run_copy_import_task(csv_text: str, task_id: str | None = None) -> TaskResponse:
+def run_copy_import_task(
+    csv_text: str, task_id: str | None = None, collection_ids: list[str] | None = None
+) -> TaskResponse:
     task = create_task(
         progress=TaskProgress(
             phase="queued",
@@ -37,19 +37,19 @@ def run_copy_import_task(csv_text: str, task_id: str | None = None) -> TaskRespo
     assets: list[CopyAssetSummary] = []
 
     try:
-        reader = csv.DictReader(StringIO(csv_text))
-        if not reader.fieldnames or "source_text" not in reader.fieldnames:
+        fieldnames, rows = read_copy_import_csv(csv_text)
+        if not fieldnames or "source_text" not in fieldnames:
+            message = "CSV 必须包含 source_text 表头。"
             progress = TaskProgress(
                 phase="failed",
                 model=settings.openai_model,
                 percent=100,
                 failed_count=1,
-                current_message="CSV 必须包含 source_text 表头。",
-                errors=[{"row_number": 1, "message": "CSV 必须包含 source_text 表头。"}],
+                current_message=message,
+                errors=[{"row_number": 1, "message": message}],
             )
-            return _publish(set_task_failed(task.task_id, "CSV 必须包含 source_text 表头。", progress))
+            return _publish(set_task_failed(task.task_id, message, progress))
 
-        rows = list(reader)
         total_rows = len(rows)
         if total_rows > MAX_SYNC_IMPORT_ROWS:
             message = f"同步导入最多支持 {MAX_SYNC_IMPORT_ROWS} 行，请拆分 CSV。"
@@ -109,7 +109,7 @@ def run_copy_import_task(csv_text: str, task_id: str | None = None) -> TaskRespo
                 update={"phase": "saving_asset", "current_message": f"正在保存第 {offset}/{total_rows} 条。"}
             )
             _publish(set_task_progress(task.task_id, progress))
-            assets.append(create_copy_asset(parsed, analysis))
+            assets.append(create_copy_asset(parsed, analysis, collection_ids=collection_ids or []))
             progress = _row_done(progress, total_rows, offset, len(assets), len(errors), errors)
             _publish(set_task_progress(task.task_id, progress))
 
@@ -117,6 +117,7 @@ def run_copy_import_task(csv_text: str, task_id: str | None = None) -> TaskRespo
             "imported_count": len(assets),
             "failed_count": len(errors),
             "asset_ids": [asset.id for asset in assets],
+            "storage_backends": sorted({asset.storage_backend for asset in assets}),
         }
         finished_progress = progress.model_copy(
             update={
@@ -146,13 +147,15 @@ def run_copy_import_task(csv_text: str, task_id: str | None = None) -> TaskRespo
         )
 
 
-def run_text_import_task(text: str, task_id: str | None = None) -> TaskResponse:
+def run_text_import_task(
+    text: str, task_id: str | None = None, collection_ids: list[str] | None = None
+) -> TaskResponse:
     task = create_task(
         progress=TaskProgress(
             phase="queued",
             model=settings.openai_model,
             total_rows=1,
-            current_message="Waiting to process plain text.",
+            current_message="等待处理纯文本。",
         )
     )
     if task_id is not None:
@@ -163,23 +166,24 @@ def run_text_import_task(text: str, task_id: str | None = None) -> TaskResponse:
 
     source_text = text.strip()
     if not source_text:
+        message = "text 不能为空。"
         progress = TaskProgress(
             phase="failed",
             model=settings.openai_model,
             total_rows=1,
             percent=100,
             failed_count=1,
-            current_message="text cannot be empty.",
-            errors=[{"row_number": 1, "message": "text cannot be empty."}],
+            current_message=message,
+            errors=[{"row_number": 1, "message": message}],
         )
-        return _publish(set_task_failed(task.task_id, "text cannot be empty.", progress))
+        return _publish(set_task_failed(task.task_id, message, progress))
 
     progress = TaskProgress(
         phase="calling_llm",
         model=settings.openai_model,
         current_row=1,
         total_rows=1,
-        current_message="Calling LLM to analyze plain text.",
+        current_message="正在调用 LLM 拆解纯文本。",
     )
     _publish(set_task_running(task.task_id, progress))
 
@@ -190,11 +194,11 @@ def run_text_import_task(text: str, task_id: str | None = None) -> TaskResponse:
             update={
                 "phase": "saving_asset",
                 "percent": 80,
-                "current_message": "Saving analyzed copy asset.",
+                "current_message": "正在保存拆解后的文案资产。",
             }
         )
         _publish(set_task_progress(task.task_id, progress))
-        asset = create_copy_asset(payload, analysis)
+        asset = create_copy_asset(payload, analysis, collection_ids=collection_ids or [])
     except RuntimeError as exc:
         failed_progress = progress.model_copy(
             update={
@@ -226,7 +230,7 @@ def run_text_import_task(text: str, task_id: str | None = None) -> TaskResponse:
             "success_count": 1,
             "failed_count": 0,
             "percent": 100,
-            "current_message": "Plain text import finished.",
+            "current_message": "纯文本导入完成。",
             "errors": [],
         }
     )
@@ -238,6 +242,7 @@ def run_text_import_task(text: str, task_id: str | None = None) -> TaskResponse:
                 "imported_count": 1,
                 "failed_count": 0,
                 "asset_ids": [asset.id],
+                "storage_backends": [asset.storage_backend],
             },
         )
     )

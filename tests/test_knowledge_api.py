@@ -177,9 +177,9 @@ def test_fragment_crud_and_filters() -> None:
 
 def test_copy_import_populates_raw_copy_and_analysis_libraries(monkeypatch) -> None:
     monkeypatch.setattr("app.services.copy_analysis.get_llm_client", lambda: FakeLLMClient())
-    monkeypatch.setattr("app.api.routes.copy.enqueue_copy_import", lambda csv_text: __import__(
+    monkeypatch.setattr("app.api.routes.copy.enqueue_copy_import", lambda csv_text, collection_ids=None: __import__(
         "app.services.copy_import_jobs", fromlist=["run_copy_import_task"]
-    ).run_copy_import_task(csv_text))
+    ).run_copy_import_task(csv_text, collection_ids=collection_ids or []))
 
     response = client.post(
         "/api/copy/import",
@@ -187,6 +187,13 @@ def test_copy_import_populates_raw_copy_and_analysis_libraries(monkeypatch) -> N
     )
 
     assert response.status_code == 200
+    asset_id = response.json()["result"]["asset_ids"][0]
+
+    asset_response = client.get(f"/api/copy/assets/{asset_id}")
+    assert asset_response.status_code == 200
+    asset_payload = asset_response.json()
+    assert asset_payload["status"] == "pending_review"
+
     raw_response = client.get("/api/knowledge/raw-copies")
     assert raw_response.status_code == 200
     assert raw_response.json()["total"] == 1
@@ -196,3 +203,40 @@ def test_copy_import_populates_raw_copy_and_analysis_libraries(monkeypatch) -> N
     assert analysis_response.status_code == 200
     assert analysis_response.json()["total"] == 1
     assert analysis_response.json()["items"][0]["auto_analysis"]["topic"] == "护肤顺序纠错"
+
+    review_response = client.patch(
+        f"/api/copy/assets/{asset_id}/review",
+        json={"status": "approved", "reviewed_analysis": asset_payload["auto_analysis"]},
+    )
+    assert review_response.status_code == 200
+    assert review_response.json()["status"] == "approved"
+
+
+def test_copy_import_assigns_assets_to_collection(monkeypatch) -> None:
+    collection_response = client.post(
+        "/api/knowledge/collections",
+        json={"name": "导入集合"},
+    )
+    assert collection_response.status_code == 200
+    collection_id = collection_response.json()["id"]
+
+    monkeypatch.setattr("app.services.copy_analysis.get_llm_client", lambda: FakeLLMClient())
+    monkeypatch.setattr("app.api.routes.copy.enqueue_text_import", lambda text, collection_ids=None: __import__(
+        "app.services.copy_import_jobs", fromlist=["run_text_import_task"]
+    ).run_text_import_task(text, collection_ids=collection_ids or []))
+
+    response = client.post(
+        "/api/copy/import",
+        json={"text": "导入到指定集合的文案", "collection_ids": [collection_id]},
+    )
+
+    assert response.status_code == 200
+    raw_response = client.get(f"/api/knowledge/raw-copies?collection_id={collection_id}")
+    assert raw_response.status_code == 200
+    assert raw_response.json()["total"] == 1
+    assert raw_response.json()["items"][0]["collection_ids"] == [collection_id]
+
+    asset_response = client.get(f"/api/copy/assets?collection_id={collection_id}")
+    assert asset_response.status_code == 200
+    assert asset_response.json()["total"] == 1
+    assert asset_response.json()["items"][0]["collection_ids"] == [collection_id]

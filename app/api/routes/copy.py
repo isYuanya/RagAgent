@@ -32,8 +32,8 @@ def analyze(payload: CopyAnalysisRequest) -> CopyAnalysisResponse:
 @router.post("/import", response_model=TaskResponse)
 def import_assets(payload: CopyImportRequest) -> TaskResponse:
     if payload.text is not None:
-        return enqueue_text_import(payload.text)
-    return enqueue_copy_import(payload.csv_text or "")
+        return enqueue_text_import(payload.text, payload.collection_ids)
+    return enqueue_copy_import(payload.csv_text or "", payload.collection_ids)
 
 
 @router.get("/assets", response_model=CopyAssetListResponse)
@@ -43,6 +43,7 @@ def list_assets(
     status: str | None = None,
     industry: str | None = None,
     platform: str | None = None,
+    collection_id: str | None = None,
 ) -> CopyAssetListResponse:
     return list_copy_assets(
         page=page,
@@ -50,6 +51,7 @@ def list_assets(
         status=status,
         industry=industry,
         platform=platform,
+        collection_id=collection_id,
     )
 
 
