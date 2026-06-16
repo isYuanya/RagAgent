@@ -24,18 +24,76 @@ class _TextImportMetadata(BaseModel):
     metrics: dict[str, int | str | None] = Field(default_factory=dict)
 
 
-def analyze_copy(payload: CopyAnalysisRequest) -> CopyAnalysisResponse:
-    prompt = (
-        "你是短视频/口播文案拆解专家。请只返回 JSON，不要返回 Markdown。\n"
-        "JSON 字段必须包含：topic、target_user、core_pain、emotion_buttons、hook、"
-        "structure、expression_skills、reusable_template、suitable_scenarios、"
-        "risk_warnings、confidence。\n"
-        "emotion_buttons、structure、expression_skills、suitable_scenarios 必须是字符串数组。\n"
-        "risk_warnings 必须是对象数组，每项包含 level、message、suggestion。\n"
-        f"文案：{payload.source_text.strip()}\n"
-        f"上下文：industry={payload.industry}, audience={payload.audience}, "
-        f"platform={payload.platform}, purpose={payload.purpose}, style={payload.style}"
+def _build_copy_analysis_prompt(payload: CopyAnalysisRequest) -> str:
+    context = {
+        "industry": payload.industry,
+        "audience": payload.audience,
+        "platform": payload.platform,
+        "purpose": payload.purpose,
+        "style": payload.style,
+        "structure_type": payload.structure_type,
+        "content_type": payload.content_type,
+    }
+    return (
+        "你是短视频、口播、图文种草文案的结构化拆解专家。\n"
+        "任务：分析输入文案的表达策略，抽象出可复用的结构和写法。\n"
+        "输出规则：\n"
+        "1. 只返回一个合法 JSON 对象，不要返回 Markdown、代码块、解释文字或额外前后缀。\n"
+        "2. 所有字段都必须出现；无法判断时用空字符串、空数组或 confidence 降低体现，不要省略字段。\n"
+        "3. 不要编造文案中没有依据的产品功效、平台数据、作者信息或用户画像。\n"
+        "4. 数组字段必须返回字符串数组，不要返回逗号分隔字符串。\n"
+        "5. confidence 使用 0 到 1 的数字，表示本次拆解的可靠程度。\n"
+        "JSON 字段定义：\n"
+        "- topic: 文案主题，一句话概括。\n"
+        "- target_user: 目标用户，优先结合文案和上下文判断。\n"
+        "- core_pain: 被击中的核心痛点或欲望。\n"
+        "- emotion_buttons: 触发用户情绪的关键词数组。\n"
+        "- hook: 开头钩子或最能抓人的表达。\n"
+        "- structure: 内容推进顺序数组，例如 痛点共鸣 -> 原因解释 -> 行动建议。\n"
+        "- expression_skills: 表达技巧数组，例如 反问、对比、具体场景、口语化。\n"
+        "- reusable_template: 可复用句式或框架，保留变量占位符 ___。\n"
+        "- suitable_scenarios: 适用场景数组，例如 小红书种草、私域转化、短视频口播。\n"
+        "- risk_warnings: 风险对象数组；每项必须包含 level: low | medium | high, message, suggestion。\n"
+        "- confidence: 0 到 1 的数字。\n"
+        "返回 JSON 示例：\n"
+        '{"topic":"","target_user":"","core_pain":"","emotion_buttons":[],"hook":"","structure":[],"expression_skills":[],"reusable_template":"","suitable_scenarios":[],"risk_warnings":[],"confidence":0.8}\n'
+        f"上下文：{json.dumps(context, ensure_ascii=False)}\n"
+        f"待拆解文案：\n{payload.source_text.strip()}"
     )
+
+
+def _build_text_import_prompt(text: str) -> str:
+    return (
+        "你是文案资产导入助手，负责从用户粘贴的混合文本中抽取原文案和来源元数据。\n"
+        "输出规则：\n"
+        "1. 只返回一个合法 JSON 对象，不要返回 Markdown、代码块、解释文字或额外前后缀。\n"
+        "2. 只抽取输入中明确出现的信息；不要猜测作者、平台、粉丝数、行业、人群、目的或表现数据。\n"
+        "3. 无法确定的字段返回 null；metrics 无法确定时返回空对象 {}。\n"
+        "4. source_text 只保留真正的文案正文，不要包含作者、平台、链接、粉丝数、点赞评论等说明文字。\n"
+        "5. author_follower_count、likes、comments、favorites、shares 尽量转成数字；5.2万 转为 52000，52k 转为 52000。\n"
+        "6. content_type 只能使用：种草、情绪、知识、反转、故事、干货、争议；无法判断返回 null。\n"
+        "字段定义：\n"
+        "- source_text: 原文案正文。\n"
+        "- source_url: 文案来源链接。\n"
+        "- author_name: 作者、账号、博主、达人或发布者名称。\n"
+        "- author_url: 作者主页链接。\n"
+        "- author_follower_count: 作者粉丝数，非负整数。\n"
+        "- platform: 发布平台或渠道，例如 小红书、抖音、视频号、公众号。\n"
+        "- industry: 行业或赛道。\n"
+        "- audience: 目标人群。\n"
+        "- purpose: 内容目的，例如 种草、引流、成交、涨粉。\n"
+        "- style: 表达风格。\n"
+        "- structure_type: 内容结构类型。\n"
+        "- content_type: 内容类型枚举。\n"
+        "- metrics: 表现数据对象，只允许 likes, comments, favorites, shares。\n"
+        "返回 JSON 示例：\n"
+        '{"source_text":"","source_url":null,"author_name":null,"author_url":null,"author_follower_count":null,"platform":null,"industry":null,"audience":null,"purpose":null,"style":null,"structure_type":null,"content_type":null,"metrics":{}}\n'
+        f"用户粘贴内容：\n{text.strip()}"
+    )
+
+
+def analyze_copy(payload: CopyAnalysisRequest) -> CopyAnalysisResponse:
+    prompt = _build_copy_analysis_prompt(payload)
     raw = get_llm_client().complete(prompt)
 
     try:
@@ -47,17 +105,7 @@ def analyze_copy(payload: CopyAnalysisRequest) -> CopyAnalysisResponse:
 
 
 def extract_text_import_payload(text: str) -> CopyAnalysisRequest:
-    prompt = (
-        "你是文案导入助手。请只返回 JSON，不要返回 Markdown。\n"
-        "从用户粘贴内容中提取正文和来源元数据。无法确定的字段返回 null 或空对象。\n"
-        "JSON 字段包括：source_text, source_url, author_name, author_url, "
-        "author_follower_count, platform, industry, audience, purpose, style, "
-        "structure_type, content_type, metrics。\n"
-        "content_type 只能使用：种草、情绪、知识、反转、故事、干货、争议。\n"
-        "metrics 可以包含 likes, comments, favorites, shares，数值字段尽量转成数字。\n"
-        "source_text 只保留真正的文案正文，不要包含作者、平台、粉丝数等说明文字。\n"
-        f"用户粘贴内容：{text.strip()}"
-    )
+    prompt = _build_text_import_prompt(text)
     try:
         raw = get_llm_client().complete(prompt)
         parsed = json.loads(_strip_json_fence(raw))

@@ -34,6 +34,50 @@ def test_analyze_copy_returns_structured_result(monkeypatch) -> None:
     assert result.confidence == 0.81
 
 
+def test_analyze_copy_prompt_defines_output_contract(monkeypatch) -> None:
+    class PromptCapturingLLMClient:
+        def __init__(self) -> None:
+            self.prompt = ""
+
+        def complete(self, prompt: str) -> str:
+            self.prompt = prompt
+            return FakeLLMClient().complete(prompt)
+
+    llm_client = PromptCapturingLLMClient()
+    monkeypatch.setattr("app.services.copy_analysis.get_llm_client", lambda: llm_client)
+
+    analyze_copy(CopyAnalysisRequest(source_text="test copy"))
+
+    assert "只返回一个合法 JSON 对象" in llm_client.prompt
+    assert "不要返回 Markdown" in llm_client.prompt
+    assert "emotion_buttons" in llm_client.prompt
+    assert "risk_warnings" in llm_client.prompt
+    assert "level: low | medium | high" in llm_client.prompt
+
+
+def test_text_import_metadata_prompt_defines_extraction_rules(monkeypatch) -> None:
+    class PromptCapturingLLMClient:
+        def __init__(self) -> None:
+            self.prompt = ""
+
+        def complete(self, prompt: str) -> str:
+            self.prompt = prompt
+            return "{}"
+
+    llm_client = PromptCapturingLLMClient()
+    monkeypatch.setattr("app.services.copy_analysis.get_llm_client", lambda: llm_client)
+
+    result = __import__(
+        "app.services.copy_analysis", fromlist=["extract_text_import_payload"]
+    ).extract_text_import_payload("作者：护肤研究员\n粉丝：5.2万\n正文：test copy")
+
+    assert result.author_name == "护肤研究员"
+    assert "只抽取输入中明确出现的信息" in llm_client.prompt
+    assert "无法确定的字段返回 null" in llm_client.prompt
+    assert "author_follower_count" in llm_client.prompt
+    assert "metrics" in llm_client.prompt
+
+
 def test_generate_copy_returns_requested_variants(monkeypatch) -> None:
     monkeypatch.setattr("app.services.generation.get_llm_client", lambda: FakeLLMClient())
 

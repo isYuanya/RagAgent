@@ -160,6 +160,11 @@ Fragment provenance and ordering are first-class fields so filtering and future 
   - Extracted numeric strings such as `52,000`, `5.2万`, or `52k` should be normalized to non-negative integers where possible.
   - If the LLM returns blank metadata, backend should apply Chinese pattern fallback for common pasted labels such as `平台：小红书`, `作者：护肤研究员`, `粉丝：5.2万`, `正文：...`, and `指标：点赞120 评论8 收藏35 分享4`.
   - Fallback metadata must be stored on `CopyAssetSummary` first-class fields so frontend review chips can display author, platform, follower count, industry, audience, purpose, style, content type, structure type, metrics, and storage backend from `/api/copy/assets`.
+- LLM prompts for copy import and analysis are part of the backend contract:
+  - They must require a single valid JSON object and forbid Markdown/code fences/explanatory text.
+  - Metadata extraction prompts must say to extract only information explicitly present in the pasted text and return `null` or `{}` for unknown fields.
+  - Analysis prompts must define every response field, require string arrays for list fields, and require `risk_warnings[*]` to include `level: low | medium | high`, `message`, and `suggestion`.
+  - Prompt contract changes should be covered by tests that capture the prompt text at the LLM boundary.
 - CSV import must tolerate a UTF-8 BOM before the `source_text` header.
 - LLM review is the primary first pass:
   - If `auto_analysis.confidence >= COPY_AUTO_APPROVE_MIN_CONFIDENCE`, the imported asset starts with `status = approved`.
