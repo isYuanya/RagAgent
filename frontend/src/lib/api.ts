@@ -18,6 +18,7 @@ import type {
   FragmentFilters,
   ListResponse,
   RawCopySummary,
+  SystemStatusResponse,
   TaskResponse
 } from "./types";
 
@@ -92,6 +93,12 @@ export async function saveReview(
 
 export function deleteAsset(assetId: string): Promise<void> {
   return deleteResource(`${apiBase}/api/copy/assets/${assetId}`, "删除待审文案失败");
+}
+
+export async function fetchSystemStatus(): Promise<SystemStatusResponse> {
+  const response = await fetch(`${apiBase}/api/system/status`);
+  if (!response.ok) throw new Error("加载服务状态失败");
+  return (await response.json()) as SystemStatusResponse;
 }
 
 // ---- Knowledge base ----

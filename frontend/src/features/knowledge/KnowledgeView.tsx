@@ -30,7 +30,11 @@ const TABS: Array<{ key: KbTab; label: string }> = [
   { key: "fragments", label: "片段库" }
 ];
 
-export function KnowledgeView() {
+export function KnowledgeView({
+  headerAction
+}: {
+  headerAction?: React.ReactNode;
+}) {
   const [tab, setTab] = React.useState<KbTab>("collections");
   const [collections, setCollections] = React.useState<KnowledgeCollection[]>(
     []
@@ -60,22 +64,25 @@ export function KnowledgeView() {
             管理集合，浏览沉淀的原始文案、结构化拆解和人工维护素材。
           </p>
         </div>
-        <div className="flex max-w-3xl flex-wrap justify-end gap-1 rounded-lg border border-border bg-muted/40 p-1">
-          {TABS.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              onClick={() => setTab(item.key)}
-              className={cn(
-                "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                tab === item.key
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {item.label}
-            </button>
-          ))}
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          {headerAction}
+          <div className="flex max-w-3xl flex-wrap justify-end gap-1 rounded-lg border border-border bg-muted/40 p-1">
+            {TABS.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setTab(item.key)}
+                className={cn(
+                  "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                  tab === item.key
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
 

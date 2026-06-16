@@ -66,6 +66,22 @@ export type TaskResponse = {
 
 export type ReviewStatus = "pending_review" | "approved" | "rejected";
 
+export type ServiceHealthStatus = "ok" | "degraded" | "down";
+
+export type DependencyStatus = {
+  name: string;
+  required: boolean;
+  status: ServiceHealthStatus;
+  latency_ms?: number | null;
+  endpoint?: string | null;
+  message: string;
+};
+
+export type SystemStatusResponse = {
+  status: ServiceHealthStatus;
+  services: DependencyStatus[];
+};
+
 // ---- Knowledge base ----
 
 export type ListResponse<T> = {

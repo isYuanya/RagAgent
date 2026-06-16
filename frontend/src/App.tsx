@@ -1,4 +1,5 @@
 import * as React from "react";
+import { AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { Sidebar, type AppView } from "@/features/Sidebar";
 import { CsvUpload } from "@/features/CsvUpload";
@@ -7,23 +8,108 @@ import { ImportProgress, ImportErrors } from "@/features/ImportProgress";
 import { AssetList } from "@/features/AssetList";
 import { ReviewPanel } from "@/features/ReviewPanel";
 import { KnowledgeView } from "@/features/knowledge/KnowledgeView";
+import { SystemStatusBadge } from "@/features/system/SystemStatusBadge";
+import { SystemStatusView } from "@/features/system/SystemStatusView";
+import { getService, isServiceDown } from "@/features/system/statusUtils";
+import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/features/shared/ConfirmDialog";
 import { Card } from "@/components/ui/card";
 import {
   deleteAsset,
   fetchAssets,
+  fetchSystemStatus,
   fetchTask,
   importCsv,
   importText,
   saveReview
 } from "@/lib/api";
-import type { Analysis, CopyAsset, TaskProgress, TaskResponse } from "@/lib/types";
+import type {
+  Analysis,
+  CopyAsset,
+  SystemStatusResponse,
+  TaskProgress,
+  TaskResponse
+} from "@/lib/types";
 
 function getFirstImportedAssetId(task: TaskResponse): string | null {
   const assetIds = task.result?.asset_ids;
   return Array.isArray(assetIds) && typeof assetIds[0] === "string"
     ? assetIds[0]
     : null;
+}
+
+function ServiceDependencyWarnings({
+  redisDown,
+  workerDown,
+  postgresDown,
+  workerMessage
+}: {
+  redisDown: boolean;
+  workerDown: boolean;
+  postgresDown: boolean;
+  workerMessage?: string;
+}) {
+  if (!redisDown && !workerDown && !postgresDown) return null;
+
+  return (
+    <div className="mb-3 space-y-2 rounded-lg border border-border bg-muted/30 p-3 text-sm">
+      {redisDown ? (
+        <DependencyWarning
+          tone="danger"
+          title="Redis 不可用"
+          text="任务队列不可用，导入功能已暂停。"
+        />
+      ) : null}
+      {workerDown ? (
+        <DependencyWarning
+          tone="warning"
+          title="导入 Worker 未就绪"
+          text={
+            workerMessage ??
+            "导入任务可能会一直停留在队列中，请启动 worker。"
+          }
+        />
+      ) : null}
+      {postgresDown ? (
+        <DependencyWarning
+          tone="danger"
+          title="PostgreSQL 不可用"
+          text="数据可能无法真正落库，请先检查数据库服务。"
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function DependencyWarning({
+  tone,
+  title,
+  text
+}: {
+  tone: "danger" | "warning";
+  title: string;
+  text: string;
+}) {
+  return (
+    <div className="flex items-start gap-2">
+      <AlertTriangle
+        className={
+          tone === "danger"
+            ? "mt-0.5 size-4 text-destructive"
+            : "mt-0.5 size-4 text-amber-700"
+        }
+      />
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="font-medium">{title}</span>
+          <Badge variant={tone === "danger" ? "destructive" : "outline"}>
+            {tone === "danger" ? "阻塞" : "提醒"}
+          </Badge>
+        </div>
+        <p className="text-xs text-muted-foreground">{text}</p>
+      </div>
+    </div>
+  );
 }
 
 export function App() {
@@ -37,8 +123,27 @@ export function App() {
   const [importing, setImporting] = React.useState(false);
   const [importTask, setImportTask] = React.useState<TaskResponse | null>(null);
   const [errors, setErrors] = React.useState<TaskProgress["errors"]>([]);
+  const [systemStatus, setSystemStatus] =
+    React.useState<SystemStatusResponse | null>(null);
+  const [statusLoading, setStatusLoading] = React.useState(false);
+  const [statusCheckedAt, setStatusCheckedAt] = React.useState<Date | null>(
+    null
+  );
+  const [autoRefreshStatus, setAutoRefreshStatus] = React.useState(true);
 
   const selected = assets.find((asset) => asset.id === selectedId) ?? null;
+  const redisDown = isServiceDown(systemStatus, "redis");
+  const workerDown = isServiceDown(systemStatus, "copy_import_worker");
+  const postgresDown = isServiceDown(systemStatus, "postgres");
+  const importDisabled = importing || saving || redisDown;
+
+  const statusBadge = (
+    <SystemStatusBadge
+      status={systemStatus}
+      loading={statusLoading}
+      onClick={() => setView("system")}
+    />
+  );
 
   const loadAssets = React.useCallback(async (preferredId?: string | null) => {
     try {
@@ -55,6 +160,33 @@ export function App() {
   React.useEffect(() => {
     void loadAssets();
   }, [loadAssets]);
+
+  const loadSystemStatus = React.useCallback(async (notifyOnError = true) => {
+    setStatusLoading(true);
+    try {
+      setSystemStatus(await fetchSystemStatus());
+      setStatusCheckedAt(new Date());
+    } catch (error) {
+      setSystemStatus(null);
+      if (notifyOnError) {
+        toast.error(error instanceof Error ? error.message : "加载服务状态失败");
+      }
+    } finally {
+      setStatusLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void loadSystemStatus();
+  }, [loadSystemStatus]);
+
+  React.useEffect(() => {
+    if (!autoRefreshStatus) return;
+    const timer = window.setInterval(() => {
+      void loadSystemStatus(false);
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [autoRefreshStatus, loadSystemStatus]);
 
   // poll import task progress
   React.useEffect(() => {
@@ -167,8 +299,17 @@ export function App() {
         assetCount={assets.length}
       />
 
-      {view === "knowledge" ? (
-        <KnowledgeView />
+      {view === "system" ? (
+        <SystemStatusView
+          status={systemStatus}
+          loading={statusLoading}
+          lastCheckedAt={statusCheckedAt}
+          autoRefresh={autoRefreshStatus}
+          onAutoRefreshChange={setAutoRefreshStatus}
+          onRefresh={() => void loadSystemStatus()}
+        />
+      ) : view === "knowledge" ? (
+        <KnowledgeView headerAction={statusBadge} />
       ) : (
         <main className="flex min-w-0 flex-1 flex-col">
           <header className="flex items-center justify-between gap-4 border-b border-border px-6 py-4">
@@ -179,14 +320,15 @@ export function App() {
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              {statusBadge}
               <TextImportDialog
                 busy={importing}
-                disabled={importing || saving}
+                disabled={importDisabled}
                 onSubmit={handleTextImport}
               />
               <CsvUpload
                 busy={importing}
-                disabled={importing || saving}
+                disabled={importDisabled}
                 onFile={handleUpload}
               />
             </div>
@@ -194,6 +336,12 @@ export function App() {
 
           <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 p-6 lg:grid-cols-[minmax(320px,420px)_1fr]">
             <Card className="flex min-h-0 flex-col overflow-hidden p-4">
+              <ServiceDependencyWarnings
+                redisDown={redisDown}
+                workerDown={workerDown}
+                postgresDown={postgresDown}
+                workerMessage={getService(systemStatus, "copy_import_worker")?.message}
+              />
               {importTask?.progress ? (
                 <div className="mb-3">
                   <ImportProgress task={importTask} />
