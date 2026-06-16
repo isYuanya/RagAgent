@@ -22,9 +22,11 @@ import { EditCollectionsDialog } from "./EditCollectionsDialog";
 const ALL = "__all__";
 
 export function RawCopiesPanel({
-  collections
+  collections,
+  onViewFragments
 }: {
   collections: KnowledgeCollection[];
+  onViewFragments: (rawCopyId: string) => void;
 }) {
   const [items, setItems] = React.useState<RawCopySummary[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -147,6 +149,7 @@ export function RawCopiesPanel({
           <RawCopyDetail
             rawCopy={selected}
             onEditCollections={() => setEditOpen(true)}
+            onViewFragments={() => onViewFragments(selected.id)}
             onDelete={() => setDeleting(selected)}
           />
         ) : (

@@ -204,8 +204,13 @@ export type KnowledgeFragment = {
   fragment_role: string;
   position: string;
   industry?: string | null;
+  platform?: string | null;
+  purpose?: string | null;
+  audience?: string | null;
   source_quality: FragmentQuality;
   risk_level: FragmentRiskLevel;
+  status: ReviewStatus;
+  confidence: number;
   metadata: Record<string, unknown>;
 };
 
@@ -216,6 +221,12 @@ export type FragmentFilters = {
   fragment_role?: string;
   position?: string;
   industry?: string;
+  status?: ReviewStatus;
+  platform?: string;
+  purpose?: string;
+  audience?: string;
+  risk_level?: FragmentRiskLevel;
+  q?: string;
 };
 
 export const emptyAnalysis: Analysis = {

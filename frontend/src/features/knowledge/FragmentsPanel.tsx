@@ -1,6 +1,6 @@
 import * as React from "react";
 import { toast } from "sonner";
-import { FileSearch, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { FileSearch, Loader2, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -29,12 +29,14 @@ import {
   updateFragment
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { StatusBadge, STATUS_LABELS } from "@/features/StatusBadge";
 import type {
   FragmentFilters,
   FragmentQuality,
   FragmentRiskLevel,
   KnowledgeFragment,
-  KnowledgeFragmentCreate
+  KnowledgeFragmentCreate,
+  ReviewStatus
 } from "@/lib/types";
 import { ConfirmDialog } from "@/features/shared/ConfirmDialog";
 import { EmptyState } from "@/features/shared/EmptyState";
@@ -52,20 +54,38 @@ const RISK_LABELS: Record<FragmentRiskLevel, string> = {
   high: "高"
 };
 
-const EMPTY_FILTERS: Required<FragmentFilters> = {
-  source_copy_id: "",
-  fragment_role: "",
-  position: "",
-  industry: ""
+type FragmentFilterDraft = {
+  source_copy_id: string;
+  q: string;
+  fragment_role: string;
+  position: string;
+  industry: string;
+  platform: string;
+  purpose: string;
+  audience: string;
+  status: "" | ReviewStatus;
+  risk_level: "" | FragmentRiskLevel;
 };
 
-export function FragmentsPanel() {
+const EMPTY_FILTERS: FragmentFilterDraft = {
+  source_copy_id: "",
+  q: "",
+  fragment_role: "",
+  position: "",
+  industry: "",
+  platform: "",
+  purpose: "",
+  audience: "",
+  status: "",
+  risk_level: ""
+};
+
+export function FragmentsPanel({ sourceCopyId }: { sourceCopyId?: string }) {
   const [items, setItems] = React.useState<KnowledgeFragment[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [filters, setFilters] =
-    React.useState<Required<FragmentFilters>>(EMPTY_FILTERS);
+  const [filters, setFilters] = React.useState<FragmentFilterDraft>(EMPTY_FILTERS);
   const [draftFilters, setDraftFilters] =
-    React.useState<Required<FragmentFilters>>(EMPTY_FILTERS);
+    React.useState<FragmentFilterDraft>(EMPTY_FILTERS);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<KnowledgeFragment | null>(null);
@@ -90,6 +110,14 @@ export function FragmentsPanel() {
   React.useEffect(() => {
     void load();
   }, [load]);
+
+  React.useEffect(() => {
+    if (!sourceCopyId) return;
+    const next = { ...EMPTY_FILTERS, source_copy_id: sourceCopyId };
+    setDraftFilters(next);
+    setFilters(next);
+    setSelectedId(null);
+  }, [sourceCopyId]);
 
   function openCreate() {
     setEditing(null);
@@ -140,6 +168,23 @@ export function FragmentsPanel() {
         </div>
 
         <div className="mb-3 space-y-2 rounded-lg border border-border bg-muted/20 p-3">
+          <div className="space-y-1">
+            <Label className="text-xs">关键词</Label>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={draftFilters.q}
+                onChange={(event) =>
+                  setDraftFilters((current) => ({
+                    ...current,
+                    q: event.target.value
+                  }))
+                }
+                className="h-8 pl-7 text-xs"
+                placeholder="搜索片段正文或上下文"
+              />
+            </div>
+          </div>
           <FilterInput
             label="原文 ID"
             value={draftFilters.source_copy_id}
@@ -173,6 +218,55 @@ export function FragmentsPanel() {
               value={draftFilters.industry}
               onChange={(value) =>
                 setDraftFilters((current) => ({ ...current, industry: value }))
+              }
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <FilterInput
+              label="平台"
+              value={draftFilters.platform}
+              onChange={(value) =>
+                setDraftFilters((current) => ({ ...current, platform: value }))
+              }
+            />
+            <FilterInput
+              label="目的"
+              value={draftFilters.purpose}
+              onChange={(value) =>
+                setDraftFilters((current) => ({ ...current, purpose: value }))
+              }
+            />
+            <FilterInput
+              label="人群"
+              value={draftFilters.audience}
+              onChange={(value) =>
+                setDraftFilters((current) => ({ ...current, audience: value }))
+              }
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <FilterSelect
+              label="审核状态"
+              value={draftFilters.status}
+              options={STATUS_LABELS}
+              emptyLabel="全部状态"
+              onChange={(value) =>
+                setDraftFilters((current) => ({
+                  ...current,
+                  status: value as "" | ReviewStatus
+                }))
+              }
+            />
+            <FilterSelect
+              label="风险等级"
+              value={draftFilters.risk_level}
+              options={RISK_LABELS}
+              emptyLabel="全部风险"
+              onChange={(value) =>
+                setDraftFilters((current) => ({
+                  ...current,
+                  risk_level: value as "" | FragmentRiskLevel
+                }))
               }
             />
           </div>
@@ -213,13 +307,17 @@ export function FragmentsPanel() {
                   <span className="line-clamp-1 text-sm font-medium">
                     {item.fragment_text}
                   </span>
-                  <Badge variant={item.risk_level === "high" ? "destructive" : "muted"}>
-                    {RISK_LABELS[item.risk_level]}
-                  </Badge>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <StatusBadge status={item.status} />
+                    <Badge variant={item.risk_level === "high" ? "destructive" : "muted"}>
+                      {RISK_LABELS[item.risk_level]}
+                    </Badge>
+                  </div>
                 </div>
                 <div className="mt-1 line-clamp-1 text-xs text-muted-foreground">
                   {item.fragment_role} · {item.position} · 顺序{" "}
-                  {item.sequence_order}
+                  {item.sequence_order} · 置信度{" "}
+                  {formatConfidence(item.confidence)}
                 </div>
               </button>
             ))
@@ -280,6 +378,46 @@ function FilterInput({
   );
 }
 
+const FILTER_EMPTY = "__all__";
+
+function FilterSelect<T extends string>({
+  label,
+  value,
+  options,
+  emptyLabel,
+  onChange
+}: {
+  label: string;
+  value: "" | T;
+  options: Record<T, string>;
+  emptyLabel: string;
+  onChange: (value: "" | T) => void;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs">{label}</Label>
+      <Select
+        value={value || FILTER_EMPTY}
+        onValueChange={(next) =>
+          onChange(next === FILTER_EMPTY ? "" : (next as T))
+        }
+      >
+        <SelectTrigger className="h-8 text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={FILTER_EMPTY}>{emptyLabel}</SelectItem>
+          {Object.entries(options).map(([key, text]) => (
+            <SelectItem key={key} value={key}>
+              {text as string}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 function FragmentDetail({
   fragment,
   onEdit,
@@ -311,10 +449,19 @@ function FragmentDetail({
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
         <DetailBlock label="片段正文">{fragment.fragment_text}</DetailBlock>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <DetailBlock label="审核状态">
+            <StatusBadge status={fragment.status} />
+          </DetailBlock>
+          <DetailBlock label="置信度">
+            {formatConfidence(fragment.confidence)}
+          </DetailBlock>
           <DetailBlock label="片段角色">{fragment.fragment_role}</DetailBlock>
           <DetailBlock label="位置">{fragment.position}</DetailBlock>
           <DetailBlock label="顺序">{fragment.sequence_order}</DetailBlock>
           <DetailBlock label="行业">{fragment.industry || "未标行业"}</DetailBlock>
+          <DetailBlock label="平台">{fragment.platform || "未标平台"}</DetailBlock>
+          <DetailBlock label="目的">{fragment.purpose || "未标目的"}</DetailBlock>
+          <DetailBlock label="人群">{fragment.audience || "未标人群"}</DetailBlock>
           <DetailBlock label="来源质量">
             {QUALITY_LABELS[fragment.source_quality]}
           </DetailBlock>
@@ -466,6 +613,24 @@ function FragmentDialog({
               value={draft.industry ?? ""}
               onChange={(value) => update("industry", value)}
             />
+            <TextField
+              id="fragment-platform"
+              label="平台"
+              value={draft.platform ?? ""}
+              onChange={(value) => update("platform", value)}
+            />
+            <TextField
+              id="fragment-purpose"
+              label="目的"
+              value={draft.purpose ?? ""}
+              onChange={(value) => update("purpose", value)}
+            />
+            <TextField
+              id="fragment-audience"
+              label="人群"
+              value={draft.audience ?? ""}
+              onChange={(value) => update("audience", value)}
+            />
           </div>
 
           <TextareaField
@@ -477,6 +642,20 @@ function FragmentDialog({
           />
 
           <div className="grid gap-3 sm:grid-cols-2">
+            <EnumSelect
+              label="审核状态"
+              value={draft.status}
+              labels={STATUS_LABELS}
+              onChange={(value) => update("status", value)}
+            />
+            <NumberField
+              id="fragment-confidence"
+              label="置信度"
+              value={draft.confidence}
+              onChange={(value) => update("confidence", value)}
+              max={1}
+              step={0.01}
+            />
             <EnumSelect
               label="来源质量"
               value={draft.source_quality}
@@ -563,12 +742,16 @@ function NumberField({
   id,
   label,
   value,
-  onChange
+  onChange,
+  max,
+  step = 1
 }: {
   id: string;
   label: string;
   value: number;
   onChange: (value: number) => void;
+  max?: number;
+  step?: number;
 }) {
   return (
     <div className="space-y-1.5">
@@ -577,6 +760,8 @@ function NumberField({
         id={id}
         type="number"
         min="0"
+        max={max}
+        step={step}
         value={value}
         onChange={(event) => onChange(Number(event.target.value))}
       />
@@ -640,12 +825,18 @@ function EnumSelect<T extends string>({
   );
 }
 
-function compactFilters(filters: Required<FragmentFilters>): FragmentFilters {
+function compactFilters(filters: FragmentFilterDraft): FragmentFilters {
   return {
     source_copy_id: filters.source_copy_id.trim() || undefined,
+    q: filters.q.trim() || undefined,
     fragment_role: filters.fragment_role.trim() || undefined,
     position: filters.position.trim() || undefined,
-    industry: filters.industry.trim() || undefined
+    industry: filters.industry.trim() || undefined,
+    platform: filters.platform.trim() || undefined,
+    purpose: filters.purpose.trim() || undefined,
+    audience: filters.audience.trim() || undefined,
+    status: filters.status || undefined,
+    risk_level: filters.risk_level || undefined
   };
 }
 
@@ -662,8 +853,13 @@ function emptyFragmentDraft(): KnowledgeFragmentCreate {
     fragment_role: "",
     position: "",
     industry: null,
+    platform: null,
+    purpose: null,
+    audience: null,
     source_quality: "unknown",
     risk_level: "low",
+    status: "pending_review",
+    confidence: 0,
     metadata: {}
   };
 }
@@ -681,8 +877,13 @@ function fragmentToDraft(fragment: KnowledgeFragment): KnowledgeFragmentCreate {
     fragment_role: fragment.fragment_role,
     position: fragment.position,
     industry: fragment.industry ?? null,
+    platform: fragment.platform ?? null,
+    purpose: fragment.purpose ?? null,
+    audience: fragment.audience ?? null,
     source_quality: fragment.source_quality,
     risk_level: fragment.risk_level,
+    status: fragment.status,
+    confidence: fragment.confidence,
     metadata: fragment.metadata
   };
 }
@@ -702,7 +903,20 @@ function normalizeFragmentDraft(
     fragment_role: draft.fragment_role.trim(),
     position: draft.position.trim(),
     industry: draft.industry?.trim() || null,
+    platform: draft.platform?.trim() || null,
+    purpose: draft.purpose?.trim() || null,
+    audience: draft.audience?.trim() || null,
     sequence_order: Math.max(0, Number(draft.sequence_order) || 0),
+    confidence: clampConfidence(draft.confidence),
     metadata: draft.metadata ?? {}
   };
+}
+
+function clampConfidence(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(1, Math.max(0, value));
+}
+
+function formatConfidence(value: number): string {
+  return `${Math.round(clampConfidence(value) * 100)}%`;
 }

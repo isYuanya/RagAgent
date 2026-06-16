@@ -40,6 +40,9 @@ export function KnowledgeView({
     []
   );
   const [collectionsLoading, setCollectionsLoading] = React.useState(true);
+  const [fragmentSourceCopyId, setFragmentSourceCopyId] = React.useState<
+    string | undefined
+  >();
 
   const loadCollections = React.useCallback(async () => {
     try {
@@ -54,6 +57,11 @@ export function KnowledgeView({
   React.useEffect(() => {
     void loadCollections();
   }, [loadCollections]);
+
+  function viewFragmentsForRawCopy(rawCopyId: string) {
+    setFragmentSourceCopyId(rawCopyId);
+    setTab("fragments");
+  }
 
   return (
     <main className="flex min-w-0 flex-1 flex-col">
@@ -94,11 +102,14 @@ export function KnowledgeView({
             onChanged={loadCollections}
           />
         ) : tab === "raw-copies" ? (
-          <RawCopiesPanel collections={collections} />
+          <RawCopiesPanel
+            collections={collections}
+            onViewFragments={viewFragmentsForRawCopy}
+          />
         ) : tab === "analyses" ? (
           <AnalysesPanel />
         ) : tab === "fragments" ? (
-          <FragmentsPanel />
+          <FragmentsPanel sourceCopyId={fragmentSourceCopyId} />
         ) : (
           <ManualKnowledgePanel kind={tab} />
         )}
