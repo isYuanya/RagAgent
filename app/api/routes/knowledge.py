@@ -255,6 +255,12 @@ def list_fragments(
     fragment_role: str | None = None,
     position: str | None = None,
     industry: str | None = None,
+    status: str | None = None,
+    platform: str | None = None,
+    purpose: str | None = None,
+    audience: str | None = None,
+    risk_level: str | None = None,
+    q: str | None = None,
 ):
     return knowledge.list_fragments(
         page=page,
@@ -263,6 +269,12 @@ def list_fragments(
         fragment_role=fragment_role,
         position=position,
         industry=industry,
+        status=status,
+        platform=platform,
+        purpose=purpose,
+        audience=audience,
+        risk_level=risk_level,
+        q=q,
     )
 
 

@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Table, Text, func
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, String, Table, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -154,8 +154,13 @@ class KnowledgeFragment(Base):
     fragment_role: Mapped[str] = mapped_column(String(100))
     position: Mapped[str] = mapped_column(String(100))
     industry: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    platform: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    purpose: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    audience: Mapped[str | None] = mapped_column(String(200), nullable=True)
     source_quality: Mapped[str] = mapped_column(String(20), default="unknown")
     risk_level: Mapped[str] = mapped_column(String(20), default="low")
+    status: Mapped[str] = mapped_column(String(50), default="pending_review")
+    confidence: Mapped[float] = mapped_column(Float, default=0)
     metadata_json: Mapped[dict] = mapped_column(JSONB, default=dict)
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

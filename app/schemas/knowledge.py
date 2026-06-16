@@ -202,8 +202,13 @@ class FragmentCreate(BaseModel):
     fragment_role: str = Field(min_length=1)
     position: str = Field(min_length=1)
     industry: str | None = None
+    platform: str | None = None
+    purpose: str | None = None
+    audience: str | None = None
     source_quality: Literal["unknown", "low", "medium", "high"] = "unknown"
     risk_level: Literal["low", "medium", "high"] = "low"
+    status: Literal["pending_review", "approved", "rejected"] = "pending_review"
+    confidence: float = Field(default=0, ge=0, le=1)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -219,8 +224,13 @@ class FragmentUpdate(BaseModel):
     fragment_role: str | None = Field(default=None, min_length=1)
     position: str | None = Field(default=None, min_length=1)
     industry: str | None = None
+    platform: str | None = None
+    purpose: str | None = None
+    audience: str | None = None
     source_quality: Literal["unknown", "low", "medium", "high"] | None = None
     risk_level: Literal["low", "medium", "high"] | None = None
+    status: Literal["pending_review", "approved", "rejected"] | None = None
+    confidence: float | None = Field(default=None, ge=0, le=1)
     metadata: dict[str, Any] | None = None
 
 

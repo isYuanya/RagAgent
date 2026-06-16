@@ -141,8 +141,12 @@ Fragment provenance and ordering are first-class fields so filtering and future 
 - The fragment-level breakdown library is exposed at `/api/knowledge/fragments`.
 - A fragment must keep explicit provenance through `source_copy_id`; `analysis_id` is optional because manually split fragments may not have a persisted analysis row.
 - Fragment records store local sequence and context fields: `sequence_order`, `previous_fragment`, `next_fragment`, `before_context`, `after_context`, `fragment_text`, `fragment_role`, and `position`.
-- Weak tags are plain API fields for now: `industry`, `source_quality`, and `risk_level`. Do not hard-code product taxonomy in service logic until a taxonomy service exists.
-- List filters currently supported by backend contract: `source_copy_id`, `fragment_role`, `position`, and `industry`.
+- Weak tags and source metadata are plain API fields for now: `industry`, `platform`, `purpose`, `audience`, `source_quality`, and `risk_level`. Do not hard-code product taxonomy in service logic until a taxonomy service exists.
+- Generated fragments have `status` and `confidence`. Fragments with `confidence >= FRAGMENT_AUTO_APPROVE_MIN_CONFIDENCE` start as `approved`; lower-confidence fragments start as `pending_review`.
+- Reviewing a copy asset as `approved` automatically triggers function-level fragment extraction. The extraction must be idempotent by `source_copy_id` so repeated approvals do not duplicate fragments.
+- Fragment extraction failures must not fail the copy approval request.
+- List filters currently supported by backend contract: `source_copy_id`, `fragment_role`, `position`, `industry`, `status`, `platform`, `purpose`, `audience`, `risk_level`, and `q`.
+- The `q` filter is keyword search against fragment text and context, not vector retrieval.
 - Fragment CRUD must follow the same DB-first, in-memory fallback pattern as templates/tags/cases/blocks and must be covered by API tests.
 
 ## Copy Import Contract

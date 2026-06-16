@@ -81,6 +81,48 @@ class EmptyMetadataLLMClient:
         return FakeLLMClient().complete(prompt)
 
 
+class FragmentExtractionLLMClient:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def complete(self, prompt: str) -> str:
+        self.calls += 1
+        if self.calls == 1:
+            return """{
+                "source_text": "Check your routine before changing products. The problem may be product order, not the product itself.",
+                "platform": "xiaohongshu",
+                "industry": "beauty",
+                "audience": "new users",
+                "purpose": "education",
+                "style": "professional",
+                "metrics": {}
+            }"""
+        if self.calls == 2:
+            return FakeLLMClient().complete(prompt)
+        return """{
+            "fragments": [
+                {
+                    "fragment_text": "Check your routine before changing products.",
+                    "fragment_role": "hook",
+                    "position": "opening",
+                    "reason": "Uses a direct recommendation to stop a common mistake.",
+                    "source_quality": "high",
+                    "risk_level": "low",
+                    "confidence": 0.92
+                },
+                {
+                    "fragment_text": "The problem may be product order, not the product itself.",
+                    "fragment_role": "explanation",
+                    "position": "middle",
+                    "reason": "Explains the causal logic but needs review.",
+                    "source_quality": "medium",
+                    "risk_level": "low",
+                    "confidence": 0.62
+                }
+            ]
+        }"""
+
+
 def test_health_check() -> None:
     response = client.get("/api/health")
     assert response.status_code == 200
@@ -318,6 +360,64 @@ def test_high_confidence_import_is_auto_approved(monkeypatch) -> None:
 
     delete_response = client.delete(f"/api/copy/assets/{asset_id}")
     assert delete_response.status_code == 409
+
+
+def test_approving_copy_asset_auto_extracts_fragments(monkeypatch) -> None:
+    reset_copy_asset_store()
+    llm_client = FragmentExtractionLLMClient()
+    monkeypatch.setattr("app.services.copy_analysis.get_llm_client", lambda: llm_client)
+    monkeypatch.setattr("app.services.fragment_extraction.get_llm_client", lambda: llm_client)
+    monkeypatch.setattr("app.api.routes.copy.enqueue_text_import", lambda text, collection_ids=None: __import__(
+        "app.services.copy_import_jobs", fromlist=["run_text_import_task"]
+    ).run_text_import_task(text, collection_ids=collection_ids or []))
+
+    response = client.post(
+        "/api/copy/import",
+        json={
+            "text": (
+                "Check your routine before changing products.\n"
+                "The problem may be product order, not the product itself."
+            )
+        },
+    )
+    assert response.status_code == 200
+    asset_id = response.json()["result"]["asset_ids"][0]
+    asset_response = client.get(f"/api/copy/assets/{asset_id}")
+    asset_payload = asset_response.json()
+
+    review_response = client.patch(
+        f"/api/copy/assets/{asset_id}/review",
+        json={"status": "approved", "reviewed_analysis": asset_payload["auto_analysis"]},
+    )
+    assert review_response.status_code == 200
+
+    fragments_response = client.get(
+        "/api/knowledge/fragments"
+        "?fragment_role=hook&status=approved&platform=xiaohongshu"
+        "&purpose=education&audience=new users&q=routine"
+    )
+    assert fragments_response.status_code == 200
+    fragments_payload = fragments_response.json()
+    assert fragments_payload["total"] == 1
+    fragment = fragments_payload["items"][0]
+    assert fragment["source_copy_id"] == asset_id
+    assert fragment["status"] == "approved"
+    assert fragment["confidence"] == 0.92
+    assert fragment["platform"] == "xiaohongshu"
+    assert fragment["purpose"] == "education"
+    assert fragment["audience"] == "new users"
+
+    pending_response = client.get("/api/knowledge/fragments?status=pending_review")
+    assert pending_response.status_code == 200
+    assert pending_response.json()["total"] == 1
+
+    second_review_response = client.patch(
+        f"/api/copy/assets/{asset_id}/review",
+        json={"status": "approved", "reviewed_analysis": asset_payload["auto_analysis"]},
+    )
+    assert second_review_response.status_code == 200
+    all_fragments_response = client.get(f"/api/knowledge/fragments?source_copy_id={asset_id}")
+    assert all_fragments_response.json()["total"] == 2
 
 
 def test_copy_asset_list_merges_db_and_redis_assets(monkeypatch) -> None:

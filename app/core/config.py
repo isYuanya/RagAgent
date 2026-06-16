@@ -41,6 +41,8 @@ class Settings:
     embedding_model: str = "text-embedding-3-small"
     # LLM 自动审核通过阈值；低于该置信度的文案进入人工再审。
     copy_auto_approve_min_confidence: float = 0.85
+    # Minimum confidence for generated fragments to become immediately usable.
+    fragment_auto_approve_min_confidence: float = 0.85
 
     # 是否启用 LangSmith tracing。
     langsmith_tracing: bool = False
@@ -96,6 +98,9 @@ def get_settings() -> Settings:
         openai_model=os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
         embedding_model=os.getenv("EMBEDDING_MODEL", "text-embedding-3-small"),
         copy_auto_approve_min_confidence=_env_float("COPY_AUTO_APPROVE_MIN_CONFIDENCE", 0.85),
+        fragment_auto_approve_min_confidence=_env_float(
+            "FRAGMENT_AUTO_APPROVE_MIN_CONFIDENCE", 0.85
+        ),
         langsmith_tracing=_env_bool("LANGSMITH_TRACING", False),
         langsmith_api_key=os.getenv("LANGSMITH_API_KEY") or None,
         langsmith_project=os.getenv("LANGSMITH_PROJECT", "rag-agent-local"),

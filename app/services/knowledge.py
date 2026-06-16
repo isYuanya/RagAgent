@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import Any, TypeVar
 from uuid import uuid4
 
-from sqlalchemy import delete, insert, select
+from sqlalchemy import delete, insert, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import settings
@@ -453,20 +453,31 @@ def list_fragments(
     fragment_role: str | None = None,
     position: str | None = None,
     industry: str | None = None,
+    status: str | None = None,
+    platform: str | None = None,
+    purpose: str | None = None,
+    audience: str | None = None,
+    risk_level: str | None = None,
+    q: str | None = None,
 ) -> KnowledgeItemListResponse:
     filters = {
         "source_copy_id": source_copy_id,
         "fragment_role": fragment_role,
         "position": position,
         "industry": industry,
+        "status": status,
+        "platform": platform,
+        "purpose": purpose,
+        "audience": audience,
+        "risk_level": risk_level,
     }
-    db_response = _db_list_fragments(page, page_size, filters)
+    db_response = _db_list_fragments(page, page_size, filters, q)
     if db_response is not None:
         return db_response
     active = [
         item
         for item_id, item in _store.fragments.items()
-        if item_id not in _store.deleted_fragments and _fragment_matches(item, filters)
+        if item_id not in _store.deleted_fragments and _fragment_matches(item, filters, q)
     ]
     return KnowledgeItemListResponse(
         items=_page(active, page, page_size),
@@ -907,7 +918,7 @@ def _db_update_block(item_id: str, payload: BlockUpdate) -> BlockItem | None:
 
 
 def _db_list_fragments(
-    page: int, page_size: int, filters: dict[str, str | None]
+    page: int, page_size: int, filters: dict[str, str | None], q: str | None
 ) -> KnowledgeItemListResponse | None:
     if _db_available is False:
         return None
@@ -917,6 +928,15 @@ def _db_list_fragments(
         for key, value in filters.items():
             if value is not None:
                 statement = statement.where(getattr(KnowledgeFragment, key) == value)
+        if q:
+            like = f"%{q}%"
+            statement = statement.where(
+                or_(
+                    KnowledgeFragment.fragment_text.ilike(like),
+                    KnowledgeFragment.before_context.ilike(like),
+                    KnowledgeFragment.after_context.ilike(like),
+                )
+            )
         rows = db.scalars(
             statement.order_by(KnowledgeFragment.source_copy_id, KnowledgeFragment.sequence_order)
         ).all()
@@ -948,8 +968,13 @@ def _db_create_fragment(payload: FragmentCreate) -> FragmentItem | None:
         fragment_role=payload.fragment_role,
         position=payload.position,
         industry=payload.industry,
+        platform=payload.platform,
+        purpose=payload.purpose,
+        audience=payload.audience,
         source_quality=payload.source_quality,
         risk_level=payload.risk_level,
+        status=payload.status,
+        confidence=payload.confidence,
         metadata_json=payload.metadata,
     )
     return _db_add_item(row, _fragment_from_model)
@@ -1084,8 +1109,13 @@ def _fragment_from_model(row: KnowledgeFragment) -> FragmentItem:
         fragment_role=row.fragment_role,
         position=row.position,
         industry=row.industry,
+        platform=row.platform,
+        purpose=row.purpose,
+        audience=row.audience,
         source_quality=row.source_quality,
         risk_level=row.risk_level,
+        status=row.status,
+        confidence=row.confidence,
         metadata=row.metadata_json or {},
     )
 
@@ -1123,8 +1153,16 @@ def _raw_has_collection(raw_copy_id: str, collection_id: str) -> bool:
     return collection_id in collection_ids
 
 
-def _fragment_matches(item: FragmentItem, filters: dict[str, str | None]) -> bool:
-    return all(value is None or getattr(item, key) == value for key, value in filters.items())
+def _fragment_matches(item: FragmentItem, filters: dict[str, str | None], q: str | None) -> bool:
+    if not all(value is None or getattr(item, key) == value for key, value in filters.items()):
+        return False
+    if not q:
+        return True
+    keyword = q.lower()
+    return any(
+        keyword in (value or "").lower()
+        for value in (item.fragment_text, item.before_context, item.after_context)
+    )
 
 
 def _without_none(data: dict[str, Any]) -> dict[str, Any]:

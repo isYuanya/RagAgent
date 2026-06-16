@@ -236,9 +236,16 @@ CSV 必须包含表头 `source_text`。当前支持的列：
 | `fragment_role` | `string` | 片段角色 |
 | `position` | `string` | 片段位置 |
 | `industry` | `string \| null` | 行业弱标签 |
+| `platform` | `string \| null` | 来源平台，用于筛选 |
+| `purpose` | `string \| null` | 来源文案目的，用于筛选 |
+| `audience` | `string \| null` | 来源目标人群，用于筛选 |
 | `source_quality` | `"unknown" \| "low" \| "medium" \| "high"` | 来源质量弱标签 |
 | `risk_level` | `"low" \| "medium" \| "high"` | 风险弱标签 |
+| `status` | `"pending_review" \| "approved" \| "rejected"` | 片段审核状态；高置信度自动拆解片段为 `approved`，低置信度为 `pending_review` |
+| `confidence` | `number` | 片段拆解置信度，范围 0 到 1 |
 | `metadata` | `object` | 扩展字段 |
+
+`GET /api/knowledge/fragments` 支持筛选参数：`source_copy_id`、`fragment_role`、`position`、`industry`、`status`、`platform`、`purpose`、`audience`、`risk_level`、`q`。`q` 是基于片段正文和上下文的关键词搜索，当前不是向量检索。
 
 ### CopyAsset Delete
 
