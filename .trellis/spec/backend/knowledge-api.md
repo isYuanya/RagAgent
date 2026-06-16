@@ -154,6 +154,10 @@ Fragment provenance and ordering are first-class fields so filtering and future 
 - Sending both `csv_text` and `text`, or neither, must fail request validation with `422`.
 - Plain text import returns the same `TaskResponse` shape as CSV import. On success, `result.asset_ids` contains one asset id and `progress.percent` is `100`.
 - Plain text import uses the same worker queue (`copy_import`) and same Redis fallback behavior as CSV import.
+- Plain text import should first ask the LLM to extract import metadata from the pasted text:
+  - `source_text`, `source_url`, `author_name`, `author_url`, `author_follower_count`, `platform`, `industry`, `audience`, `purpose`, `style`, and `metrics`.
+  - If metadata extraction fails or returns invalid JSON, import must continue with the raw pasted text as `source_text`.
+  - Extracted numeric strings such as `52,000`, `5.2万`, or `52k` should be normalized to non-negative integers where possible.
 - CSV import must tolerate a UTF-8 BOM before the `source_text` header.
 - LLM review is the primary first pass:
   - If `auto_analysis.confidence >= COPY_AUTO_APPROVE_MIN_CONFIDENCE`, the imported asset starts with `status = approved`.

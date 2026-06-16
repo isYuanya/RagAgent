@@ -1,7 +1,7 @@
 from app.core.config import settings
-from app.schemas.copy import CopyAnalysisRequest, CopyAssetSummary, CopyImportRowError
+from app.schemas.copy import CopyAssetSummary, CopyImportRowError
 from app.schemas.task import TaskProgress, TaskResponse
-from app.services.copy_analysis import analyze_copy
+from app.services.copy_analysis import analyze_copy, extract_text_import_payload
 from app.services.copy_assets import (
     MAX_SYNC_IMPORT_ROWS,
     create_copy_asset,
@@ -188,7 +188,7 @@ def run_text_import_task(
     _publish(set_task_running(task.task_id, progress))
 
     try:
-        payload = CopyAnalysisRequest(source_text=source_text)
+        payload = extract_text_import_payload(source_text)
         analysis = analyze_copy(payload)
         progress = progress.model_copy(
             update={

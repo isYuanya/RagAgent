@@ -42,6 +42,34 @@ class HighConfidenceLLMClient:
         }"""
 
 
+class TextMetadataLLMClient:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def complete(self, prompt: str) -> str:
+        self.calls += 1
+        if self.calls == 1:
+            return """{
+            "source_text": "Check your skin care order before changing products.",
+            "source_url": "https://example.com/post/metadata",
+            "author_name": "Skin Researcher",
+            "author_url": "https://example.com/author/skin",
+            "author_follower_count": "52,000",
+            "platform": "xiaohongshu",
+            "industry": "beauty",
+            "audience": "new users",
+            "purpose": "education",
+            "style": "professional",
+            "metrics": {
+                "likes": "120",
+                "comments": "8",
+                "favorites": "35",
+                "shares": "4"
+            }
+        }"""
+        return FakeLLMClient().complete(prompt)
+
+
 def test_health_check() -> None:
     response = client.get("/api/health")
     assert response.status_code == 200
@@ -157,6 +185,45 @@ def test_import_plain_text_copy_asset(monkeypatch) -> None:
     assert item["source_text"] == "plain text copy"
     assert item["auto_analysis"]["confidence"] == 0.8
     assert item["storage_backend"] in {"postgres", "redis", "memory"}
+
+
+def test_import_plain_text_extracts_embedded_metadata(monkeypatch) -> None:
+    reset_copy_asset_store()
+    llm_client = TextMetadataLLMClient()
+    monkeypatch.setattr("app.services.copy_analysis.get_llm_client", lambda: llm_client)
+    monkeypatch.setattr("app.api.routes.copy.enqueue_text_import", lambda text, collection_ids=None: __import__(
+        "app.services.copy_import_jobs", fromlist=["run_text_import_task"]
+    ).run_text_import_task(text, collection_ids=collection_ids or []))
+
+    response = client.post(
+        "/api/copy/import",
+        json={
+            "text": (
+                "Platform: xiaohongshu\n"
+                "Author: Skin Researcher\n"
+                "Followers: 52,000\n"
+                "Content: Check your skin care order before changing products."
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "finished"
+
+    list_response = client.get("/api/copy/assets")
+    assert list_response.status_code == 200
+    item = list_response.json()["items"][0]
+    assert item["source_text"] == "Check your skin care order before changing products."
+    assert item["source_url"] == "https://example.com/post/metadata"
+    assert item["author_name"] == "Skin Researcher"
+    assert item["author_url"] == "https://example.com/author/skin"
+    assert item["author_follower_count"] == 52000
+    assert item["platform"] == "xiaohongshu"
+    assert item["industry"] == "beauty"
+    assert item["audience"] == "new users"
+    assert item["purpose"] == "education"
+    assert item["style"] == "professional"
+    assert item["metrics"] == {"likes": 120, "comments": 8, "favorites": 35, "shares": 4}
 
 
 def test_import_csv_accepts_utf8_bom(monkeypatch) -> None:
