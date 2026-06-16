@@ -167,3 +167,93 @@ Fragment provenance and ordering are first-class fields so filtering and future 
 - Successful delete returns `204`; subsequent asset detail requests return `404` and list endpoints omit the asset.
 - Database-backed delete is a soft delete using `copy_sources.metadata_json.deleted = true`.
 - Redis and in-memory fallbacks remove the asset id from the active cache/order.
+
+## Scenario: System Status Diagnostics
+
+### 1. Scope / Trigger
+
+- Trigger: backend work that changes local dependency diagnostics, startup checks, import queue health, or frontend-visible system status contracts.
+- Applies to the FastAPI system endpoint and the service checks for PostgreSQL, Redis, RQ worker registration, and Milvus.
+
+### 2. Signatures
+
+```text
+GET /api/system/status
+```
+
+Response schema:
+
+```json
+{
+  "status": "ok | degraded | down",
+  "services": [
+    {
+      "name": "postgres | redis | copy_import_worker | milvus",
+      "required": true,
+      "status": "ok | degraded | down",
+      "latency_ms": 1,
+      "endpoint": "safe display endpoint",
+      "message": "human readable status"
+    }
+  ]
+}
+```
+
+### 3. Contracts
+
+- The endpoint returns `200` even when dependencies are unavailable; failure details live in `services[*]`.
+- Required services:
+  - `postgres`: checks the configured SQLAlchemy database with a short `SELECT 1`.
+  - `redis`: checks `settings.redis_url` with `PING`.
+  - `copy_import_worker`: checks whether an RQ worker is registered for queue `copy_import`.
+- Optional services:
+  - `milvus`: checks `settings.milvus_uri`; failure makes the overall status `degraded`, not `down`.
+- Response endpoints must be safe to display and must not expose passwords or query strings from configured URLs.
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior |
+| --- | --- |
+| All required and optional services ok | overall `status = ok` |
+| Any required service down | overall `status = down` |
+| Required services ok and optional service degraded/down | overall `status = degraded` |
+| PostgreSQL unavailable | `postgres.status = down`, endpoint still returns `200` |
+| Redis unavailable | `redis.status = down`; worker check also reports it cannot inspect workers |
+| No RQ worker listening on `copy_import` | `copy_import_worker.status = down` and message warns imports may stay queued |
+| Milvus unavailable | `milvus.status = degraded`; endpoint still returns `200` |
+
+### 5. Good/Base/Bad Cases
+
+- Good: frontend calls `/api/system/status` on startup and shows explicit warnings before users import data.
+- Base: local development with PostgreSQL and Redis running but Milvus down returns `degraded`.
+- Bad: do not infer worker health only from Redis availability; Redis can accept jobs while no worker consumes `copy_import`.
+- Bad: do not return raw `DATABASE_URL` if it contains a password or query string.
+
+### 6. Tests Required
+
+- API test that `/api/system/status` returns the expected response shape.
+- Unit test that a required service failure makes overall status `down`.
+- Unit test that an optional service failure makes overall status `degraded`.
+- Unit test that URL redaction removes passwords and query strings.
+- Unit tests that worker status is `ok` when a worker listens to `copy_import` and `down` when none do.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+return {"redis": "ok"}  # Worker may still be missing.
+```
+
+#### Correct
+
+```python
+return {
+    "name": "copy_import_worker",
+    "required": True,
+    "status": "down",
+    "message": "No worker is listening on copy_import; import tasks may stay queued.",
+}
+```
+
+The worker is a first-class required dependency because queued imports need a running consumer.
