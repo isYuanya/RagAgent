@@ -37,7 +37,7 @@ export function ReviewPanel({
 }: {
   asset: CopyAsset | null;
   saving: boolean;
-  onSave: (status: string, draft: Analysis) => void;
+  onSave: (status: ReviewStatus, draft: Analysis) => void;
 }) {
   const [draft, setDraft] = React.useState<Analysis>(emptyAnalysis);
   const [status, setStatus] = React.useState<ReviewStatus>("pending_review");
@@ -50,6 +50,13 @@ export function ReviewPanel({
 
   function update<K extends keyof Analysis>(key: K, value: Analysis[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
+  }
+
+  function handleStatusClick(nextStatus: ReviewStatus) {
+    setStatus(nextStatus);
+    if (nextStatus === "approved" || nextStatus === "rejected") {
+      onSave(nextStatus, draft);
+    }
   }
 
   if (!asset) {
@@ -105,9 +112,10 @@ export function ReviewPanel({
               <button
                 key={option.value}
                 type="button"
-                onClick={() => setStatus(option.value)}
+                onClick={() => handleStatusClick(option.value)}
+                disabled={saving}
                 className={cn(
-                  "flex h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-ring",
+                  "flex h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60",
                   status === option.value
                     ? "border-primary bg-accent text-accent-foreground ring-1 ring-primary/20"
                     : "border-border bg-background text-muted-foreground hover:bg-accent/50 hover:text-foreground"
