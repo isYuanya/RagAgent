@@ -74,6 +74,10 @@ export async function saveReview(
   return payload as CopyAsset;
 }
 
+export function deleteAsset(assetId: string): Promise<void> {
+  return deleteResource(`${apiBase}/api/copy/assets/${assetId}`, "删除待审文案失败");
+}
+
 // ---- Knowledge base ----
 
 const knowledgeBase = `${apiBase}/api/knowledge`;

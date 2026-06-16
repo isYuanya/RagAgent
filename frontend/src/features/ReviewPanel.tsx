@@ -1,23 +1,34 @@
 import * as React from "react";
-import { ExternalLink, Loader2, Save } from "lucide-react";
+import {
+  CheckCircle2,
+  Clock,
+  ExternalLink,
+  Loader2,
+  Save,
+  XCircle
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import {
   emptyAnalysis,
   type Analysis,
-  type CopyAsset
+  type CopyAsset,
+  type ReviewStatus
 } from "@/lib/types";
-import { formatFollowers, formatMetrics, splitLines } from "@/lib/utils";
+import { cn, formatFollowers, formatMetrics, splitLines } from "@/lib/utils";
+
+const REVIEW_STATUS_OPTIONS: Array<{
+  value: ReviewStatus;
+  label: string;
+  icon: React.ReactNode;
+}> = [
+  { value: "pending_review", label: "待审核", icon: <Clock className="size-4" /> },
+  { value: "approved", label: "确认通过", icon: <CheckCircle2 className="size-4" /> },
+  { value: "rejected", label: "拒绝入库", icon: <XCircle className="size-4" /> }
+];
 
 export function ReviewPanel({
   asset,
@@ -29,12 +40,12 @@ export function ReviewPanel({
   onSave: (status: string, draft: Analysis) => void;
 }) {
   const [draft, setDraft] = React.useState<Analysis>(emptyAnalysis);
-  const [status, setStatus] = React.useState("pending_review");
+  const [status, setStatus] = React.useState<ReviewStatus>("pending_review");
 
   React.useEffect(() => {
     if (!asset) return;
     setDraft(asset.reviewed_analysis ?? asset.auto_analysis ?? emptyAnalysis);
-    setStatus(asset.status);
+    setStatus((asset.status as ReviewStatus) ?? "pending_review");
   }, [asset?.id]);
 
   function update<K extends keyof Analysis>(key: K, value: Analysis[K]) {
@@ -55,15 +66,11 @@ export function ReviewPanel({
         <div>
           <h2 className="text-base font-semibold">校正拆解</h2>
           <p className="text-xs text-muted-foreground">
-            校正 LLM 拆解结果，保存为审核资产。
+            校正 LLM 拆解结果，选择审核结论后保存。
           </p>
         </div>
         <Button onClick={() => onSave(status, draft)} disabled={saving}>
-          {saving ? (
-            <Loader2 className="animate-spin" />
-          ) : (
-            <Save />
-          )}
+          {saving ? <Loader2 className="animate-spin" /> : <Save />}
           {saving ? "保存中" : "保存审核"}
         </Button>
       </div>
@@ -86,10 +93,33 @@ export function ReviewPanel({
               rel="noreferrer"
               className="inline-flex w-fit items-center gap-1 text-xs font-medium text-primary hover:underline"
             >
-              <ExternalLink className="size-3.5" /> 作者主页
+              <ExternalLink className="size-3.5" />
+              作者主页
             </a>
           ) : null}
         </section>
+
+        <Field label="审核结论">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {REVIEW_STATUS_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setStatus(option.value)}
+                className={cn(
+                  "flex h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-ring",
+                  status === option.value
+                    ? "border-primary bg-accent text-accent-foreground ring-1 ring-primary/20"
+                    : "border-border bg-background text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                )}
+                aria-pressed={status === option.value}
+              >
+                {option.icon}
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </Field>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <TextField
@@ -142,30 +172,16 @@ export function ReviewPanel({
           />
         </Field>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label={`置信度（${draft.confidence.toFixed(2)}）`}>
-            <Input
-              type="number"
-              min="0"
-              max="1"
-              step="0.01"
-              value={draft.confidence}
-              onChange={(e) => update("confidence", Number(e.target.value))}
-            />
-          </Field>
-          <Field label="审核状态">
-            <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="pending_review">待审核</SelectItem>
-                <SelectItem value="approved">已确认</SelectItem>
-                <SelectItem value="rejected">已拒绝</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-        </div>
+        <Field label={`置信度（${draft.confidence.toFixed(2)}）`}>
+          <Input
+            type="number"
+            min="0"
+            max="1"
+            step="0.01"
+            value={draft.confidence}
+            onChange={(e) => update("confidence", Number(e.target.value))}
+          />
+        </Field>
       </div>
     </div>
   );

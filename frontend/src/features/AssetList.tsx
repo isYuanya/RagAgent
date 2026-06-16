@@ -1,5 +1,6 @@
 import * as React from "react";
-import { Inbox, Search } from "lucide-react";
+import { Inbox, Search, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -34,12 +35,16 @@ export function AssetList({
   assets,
   loading,
   selectedId,
-  onSelect
+  deletingId,
+  onSelect,
+  onDelete
 }: {
   assets: CopyAsset[];
   loading: boolean;
   selectedId: string | null;
+  deletingId?: string | null;
   onSelect: (id: string) => void;
+  onDelete: (asset: CopyAsset) => void;
 }) {
   const [filters, setFilters] = React.useState<Filters>({
     platform: ALL,
@@ -115,7 +120,9 @@ export function AssetList({
               key={asset.id}
               asset={asset}
               active={asset.id === selectedId}
-              onClick={() => onSelect(asset.id)}
+              deleting={asset.id === deletingId}
+              onSelect={() => onSelect(asset.id)}
+              onDelete={() => onDelete(asset)}
             />
           ))
         )}
@@ -157,31 +164,53 @@ function FilterSelect({
 function AssetRow({
   asset,
   active,
-  onClick
+  deleting,
+  onSelect,
+  onDelete
 }: {
   asset: CopyAsset;
   active: boolean;
-  onClick: () => void;
+  deleting: boolean;
+  onSelect: () => void;
+  onDelete: () => void;
 }) {
   const title = asset.auto_analysis?.topic || asset.source_text.slice(0, 28);
+  const canDelete = asset.status === "pending_review";
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
+    <div
       className={cn(
-        "w-full rounded-lg border bg-card p-3 text-left transition-colors hover:border-primary/40 hover:bg-accent/40",
+        "flex items-stretch gap-1 rounded-lg border bg-card p-1 transition-colors hover:border-primary/40 hover:bg-accent/40",
         active && "border-primary bg-accent/60 ring-1 ring-primary/20"
       )}
     >
-      <div className="flex items-start justify-between gap-2">
-        <span className="line-clamp-1 text-sm font-medium">{title}</span>
-        <StatusBadge status={asset.status} />
-      </div>
-      <div className="mt-1 line-clamp-1 text-xs text-muted-foreground">
-        {asset.author_name ?? "未标作者"} · {asset.platform ?? "未标平台"} ·{" "}
-        {asset.industry ?? "未标行业"}
-      </div>
-    </button>
+      <button
+        type="button"
+        onClick={onSelect}
+        className="min-w-0 flex-1 rounded-md px-2 py-2 text-left focus:outline-none focus:ring-2 focus:ring-ring"
+      >
+        <div className="flex items-start justify-between gap-2">
+          <span className="line-clamp-1 text-sm font-medium">{title}</span>
+          <StatusBadge status={asset.status} />
+        </div>
+        <div className="mt-1 line-clamp-1 text-xs text-muted-foreground">
+          {asset.author_name ?? "未标作者"} · {asset.platform ?? "未标平台"} ·{" "}
+          {asset.industry ?? "未标行业"}
+        </div>
+      </button>
+      <Button
+        type="button"
+        size="icon"
+        variant="ghost"
+        className="mt-1 size-8 shrink-0 text-muted-foreground hover:text-destructive disabled:opacity-40"
+        onClick={onDelete}
+        disabled={!canDelete || deleting}
+        aria-label={`删除${title}`}
+        title={canDelete ? "删除待审文案" : "仅待审文案可删除"}
+      >
+        <Trash2 className="size-4" />
+      </Button>
+    </div>
   );
 }
 

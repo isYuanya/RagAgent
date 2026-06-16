@@ -6,8 +6,10 @@ import { ImportProgress, ImportErrors } from "@/features/ImportProgress";
 import { AssetList } from "@/features/AssetList";
 import { ReviewPanel } from "@/features/ReviewPanel";
 import { KnowledgeView } from "@/features/knowledge/KnowledgeView";
+import { ConfirmDialog } from "@/features/shared/ConfirmDialog";
 import { Card } from "@/components/ui/card";
 import {
+  deleteAsset,
   fetchAssets,
   fetchTask,
   importCsv,
@@ -21,6 +23,8 @@ export function App() {
   const [listLoading, setListLoading] = React.useState(true);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
+  const [deleting, setDeleting] = React.useState<CopyAsset | null>(null);
+  const [deleteBusy, setDeleteBusy] = React.useState(false);
   const [importing, setImporting] = React.useState(false);
   const [importTask, setImportTask] = React.useState<TaskResponse | null>(null);
   const [errors, setErrors] = React.useState<TaskProgress["errors"]>([]);
@@ -106,6 +110,25 @@ export function App() {
     }
   }
 
+  async function handleDelete() {
+    if (!deleting) return;
+    setDeleteBusy(true);
+    try {
+      await deleteAsset(deleting.id);
+      const nextAssets = assets.filter((asset) => asset.id !== deleting.id);
+      setAssets(nextAssets);
+      if (selectedId === deleting.id) {
+        setSelectedId(nextAssets[0]?.id ?? null);
+      }
+      toast.success("待审文案已删除");
+      setDeleting(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "删除失败");
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
+
   return (
     <div className="flex min-h-screen bg-background">
       <Sidebar
@@ -150,7 +173,9 @@ export function App() {
                   assets={assets}
                   loading={listLoading}
                   selectedId={selectedId}
+                  deletingId={deleting?.id ?? null}
                   onSelect={setSelectedId}
+                  onDelete={setDeleting}
                 />
               </div>
             </Card>
@@ -159,6 +184,15 @@ export function App() {
               <ReviewPanel asset={selected} saving={saving} onSave={handleSave} />
             </Card>
           </div>
+
+          <ConfirmDialog
+            open={deleting !== null}
+            onOpenChange={(open) => !open && setDeleting(null)}
+            title="删除待审文案"
+            description="删除后该文案资产不再出现在待审列表中。"
+            busy={deleteBusy}
+            onConfirm={handleDelete}
+          />
         </main>
       )}
     </div>
