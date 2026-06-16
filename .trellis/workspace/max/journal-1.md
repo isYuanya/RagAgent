@@ -71,3 +71,37 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: Copy import persistence and tooling cleanup
+
+**Date**: 2026-06-16
+**Task**: Copy import persistence and tooling cleanup
+**Branch**: `master`
+
+### Summary
+
+Implemented copy import persistence review flow, added configurable LLM auto-approval threshold, cleaned project tooling into version control, and archived the copy persistence task.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `811c263` | (see git log) |
+| `10c4000` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
