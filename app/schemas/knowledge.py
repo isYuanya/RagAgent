@@ -11,6 +11,7 @@ SourceType = Literal["raw_copy", "analysis"]
 class SourceReference(BaseModel):
     source_type: SourceType
     source_id: str
+    source_display: str | None = None
 
 
 class KnowledgeCollectionCreate(BaseModel):

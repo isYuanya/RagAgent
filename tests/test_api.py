@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.schemas.copy import CopyAssetSummary
 from app.services.copy_assets import list_copy_assets, reset_copy_asset_store
+from app.services.knowledge import reset_knowledge_store
 
 
 client = TestClient(app)
@@ -152,6 +153,29 @@ class BackfillFragmentExtractionLLMClient:
                     "confidence": 0.91
                 }
             ]
+        }"""
+
+
+class DerivedKnowledgeLLMClient:
+    def complete(self, prompt: str) -> str:
+        return """{
+            "topic": "derived library topic",
+            "target_user": "new users",
+            "core_pain": "routine has no effect",
+            "emotion_buttons": ["curiosity"],
+            "hook": "Check the order first.",
+            "structure": ["raise problem", "give advice"],
+            "expression_skills": ["short sentences"],
+            "reusable_template": "If you feel ___, check ___ first.",
+            "suitable_scenarios": ["education"],
+            "risk_warnings": [
+                {
+                    "level": "high",
+                    "message": "Avoid absolute guaranteed results.",
+                    "suggestion": "Use cautious wording."
+                }
+            ],
+            "confidence": 0.8
         }"""
 
 
@@ -372,6 +396,56 @@ def test_import_csv_accepts_utf8_bom(monkeypatch) -> None:
     assert list_response.status_code == 200
     assert list_response.json()["total"] == 1
     assert list_response.json()["items"][0]["source_text"] == "bom copy"
+
+
+def test_import_syncs_analysis_to_knowledge_libraries(monkeypatch) -> None:
+    reset_copy_asset_store()
+    reset_knowledge_store()
+    monkeypatch.setattr("app.services.copy_analysis.get_llm_client", lambda: DerivedKnowledgeLLMClient())
+    monkeypatch.setattr("app.api.routes.copy.enqueue_copy_import", lambda csv_text, collection_ids=None: __import__(
+        "app.services.copy_import_jobs", fromlist=["run_copy_import_task"]
+    ).run_copy_import_task(csv_text, collection_ids=collection_ids or []))
+
+    response = client.post(
+        "/api/copy/import",
+        json={
+            "csv_text": (
+                "source_text,industry,audience,purpose,likes\n"
+                "source copy for derived knowledge,beauty,new users,education,120\n"
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    asset_id = response.json()["result"]["asset_ids"][0]
+
+    templates_response = client.get("/api/knowledge/templates")
+    assert templates_response.status_code == 200
+    templates_payload = templates_response.json()
+    assert templates_payload["total"] == 1
+    template = templates_payload["items"][0]
+    assert template["content"] == "If you feel ___, check ___ first."
+    assert template["source"]["source_id"] == asset_id
+    assert template["source"]["source_display"] == "source copy for derived knowledge"
+
+    tags_response = client.get("/api/knowledge/tags")
+    assert tags_response.status_code == 200
+    tags = tags_response.json()["items"]
+    assert ("beauty", "industry") in {(item["name"], item["category"]) for item in tags}
+    assert ("curiosity", "emotion") in {(item["name"], item["category"]) for item in tags}
+    assert all(item["source"]["source_display"] == "source copy for derived knowledge" for item in tags)
+
+    cases_response = client.get("/api/knowledge/cases")
+    assert cases_response.status_code == 200
+    assert cases_response.json()["total"] == 1
+    assert cases_response.json()["items"][0]["performance_summary"] == "likes: 120"
+
+    blocks_response = client.get("/api/knowledge/blocks")
+    assert blocks_response.status_code == 200
+    block = blocks_response.json()["items"][0]
+    assert block["content"] == "Avoid absolute guaranteed results."
+    assert block["severity"] == "high"
+    assert block["source"]["source_display"] == "source copy for derived knowledge"
 
 
 def test_high_confidence_import_is_auto_approved(monkeypatch) -> None:

@@ -564,7 +564,42 @@ GET /api/knowledge/fragments?fragment_role=hook&position=opening&industry=beauty
 - `text` 不能为空字符串。
 - 导入完成后用 `result.asset_ids` 拉取 `/api/copy/assets/{asset_id}` 或刷新资产列表。
 
-## 10. 待审核文案删除
+## 10. Derived Knowledge Sync
+
+After CSV or plain-text import finishes, backend derives knowledge items from the
+LLM analysis automatically.
+
+- Template library: `reusable_template`, `structure`, and `suitable_scenarios`.
+- Tag library: source `industry`, `purpose`, `audience`, analysis `target_user`,
+  `emotion_buttons`, `hook`, and `expression_skills`.
+- Block library: `risk_warnings`.
+- Case library: positive performance `metrics`.
+
+Frontend can refresh these endpoints after import completion:
+
+```text
+GET /api/knowledge/templates
+GET /api/knowledge/tags
+GET /api/knowledge/blocks
+GET /api/knowledge/cases
+```
+
+Source reference responses include `source_display`:
+
+```json
+{
+  "source": {
+    "source_type": "raw_copy",
+    "source_id": "raw-copy-id",
+    "source_display": "source copy excerpt"
+  }
+}
+```
+
+Display rule: show `source.source_display` when present. Use `source.source_id`
+only for navigation or follow-up API calls.
+
+## 11. 待审核文案删除
 
 导入后的文案资产可以通过以下接口删除：
 

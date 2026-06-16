@@ -62,10 +62,11 @@ knowledge_blocks
 - Templates, tags, cases, and blocks accept optional source traceability:
 
 ```json
-{"source": {"source_type": "raw_copy", "source_id": "<id>"}}
+{"source": {"source_type": "raw_copy", "source_id": "<id>", "source_display": "original copy excerpt"}}
 ```
 
 `source_type` is `raw_copy` or `analysis`.
+- `source_display` is an optional response/display field. For raw-copy sources, backend resolves it from the source copy text so frontend does not need to display raw UUIDs.
 
 ### 4. Validation & Error Matrix
 
@@ -80,6 +81,7 @@ knowledge_blocks
 ### 5. Good/Base/Bad Cases
 
 - Good: CSV import creates a raw copy and auto analysis; both appear through `/api/knowledge/raw-copies` and `/api/knowledge/analyses`.
+- Good: CSV/text import derives reusable template, tags, risk blocks, and performance case records from the analysis when the relevant fields are present.
 - Base: manually created templates/tags/cases/blocks persist with optional source reference.
 - Base: manually created fragments persist with explicit `source_copy_id`, sequence/context fields, and optional `analysis_id`.
 - Bad: do not create a fake empty analysis just to store a raw copy; raw copies may have `auto_analysis = null`.
@@ -180,6 +182,13 @@ Fragment provenance and ordering are first-class fields so filtering and future 
   - If `auto_analysis.confidence >= COPY_AUTO_APPROVE_MIN_CONFIDENCE`, the imported asset starts with `status = approved`.
   - Otherwise it starts with `status = pending_review` and should be shown to a human reviewer.
 - `COPY_AUTO_APPROVE_MIN_CONFIDENCE` defaults to `0.85` and must stay configurable through backend settings.
+- After a copy asset is imported and analyzed, backend synchronizes selected analysis fields into specialized knowledge libraries:
+  - `reusable_template`, `structure`, and `suitable_scenarios` create one template item.
+  - `industry`, `purpose`, `audience` or `target_user`, `emotion_buttons`, `hook`, and `expression_skills` create tag items.
+  - `risk_warnings` create block items with `block_type = violation` and matching severity.
+  - Non-empty positive `metrics` create a case item with a performance summary.
+- Derived knowledge items are idempotent by source asset id, derived kind, and derived content key, so repeated imports/reviews do not create duplicates for the same analysis content.
+- Derived templates/tags/cases/blocks must keep `source.source_type = raw_copy`, `source.source_id = copy asset id`, and a frontend-friendly `source.source_display` excerpt.
 
 ## Copy Asset Delete Contract
 

@@ -328,6 +328,7 @@ def list_templates(page: int = 1, page_size: int = 20) -> KnowledgeItemListRespo
 
 
 def create_template(payload: TemplateCreate) -> TemplateItem:
+    payload = _with_source_display(payload)
     db_item = _db_create_template(payload)
     if db_item is not None:
         return db_item
@@ -359,6 +360,7 @@ def list_tags(page: int = 1, page_size: int = 20) -> KnowledgeItemListResponse:
 
 
 def create_tag(payload: TagCreate) -> TagItem:
+    payload = _with_source_display(payload)
     db_item = _db_create_tag(payload)
     if db_item is not None:
         return db_item
@@ -390,6 +392,7 @@ def list_cases(page: int = 1, page_size: int = 20) -> KnowledgeItemListResponse:
 
 
 def create_case(payload: CaseCreate) -> CaseItem:
+    payload = _with_source_display(payload)
     db_item = _db_create_case(payload)
     if db_item is not None:
         return db_item
@@ -421,6 +424,7 @@ def list_blocks(page: int = 1, page_size: int = 20) -> KnowledgeItemListResponse
 
 
 def create_block(payload: BlockCreate) -> BlockItem:
+    payload = _with_source_display(payload)
     db_item = _db_create_block(payload)
     if db_item is not None:
         return db_item
@@ -1046,7 +1050,39 @@ def _apply_source(row, source) -> None:
 def _source_from_model(row):
     if not row.source_type or not row.source_id:
         return None
-    return {"source_type": row.source_type, "source_id": str(row.source_id)}
+    return {
+        "source_type": row.source_type,
+        "source_id": str(row.source_id),
+        "source_display": _resolve_source_display(row.source_type, str(row.source_id)),
+    }
+
+
+def _with_source_display(payload):
+    if payload.source is None or payload.source.source_display:
+        return payload
+    return payload.model_copy(
+        update={
+            "source": payload.source.model_copy(
+                update={
+                    "source_display": _resolve_source_display(
+                        payload.source.source_type, payload.source.source_id
+                    )
+                }
+            )
+        }
+    )
+
+
+def _resolve_source_display(source_type: str, source_id: str) -> str | None:
+    if source_type != "raw_copy":
+        return None
+    asset = get_copy_asset(source_id)
+    if asset is None:
+        return None
+    text = " ".join(asset.source_text.split())
+    if len(text) <= 80:
+        return text
+    return f"{text[:77]}..."
 
 
 def _template_from_model(row: KnowledgeTemplate) -> TemplateItem:

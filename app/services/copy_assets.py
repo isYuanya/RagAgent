@@ -82,6 +82,9 @@ def import_copy_assets(csv_text: str) -> CopyImportResponse:
 
         analysis = analyze_copy(payload)
         asset = create_copy_asset(payload, analysis)
+        from app.services.knowledge_sync import sync_asset_analysis_to_knowledge
+
+        sync_asset_analysis_to_knowledge(asset)
         assets.append(asset)
 
     return CopyImportResponse(

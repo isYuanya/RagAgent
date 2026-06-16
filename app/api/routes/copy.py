@@ -16,6 +16,7 @@ from app.services.copy_assets import (
     review_copy_asset,
 )
 from app.services.fragment_extraction import extract_fragments_for_asset_id
+from app.services.knowledge_sync import sync_asset_analysis_to_knowledge
 from app.workers.import_queue import enqueue_copy_import, enqueue_text_import
 from app.workflows.copy_analysis import run_analysis_workflow
 
@@ -69,6 +70,7 @@ def review_asset(asset_id: str, payload: CopyAssetReviewRequest) -> CopyAssetSum
     asset = review_copy_asset(asset_id, payload)
     if asset is None:
         raise HTTPException(status_code=404, detail="Copy asset not found")
+    sync_asset_analysis_to_knowledge(asset)
     if asset.status == "approved":
         extract_fragments_for_asset_id(asset.id)
     return asset

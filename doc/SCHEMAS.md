@@ -276,6 +276,32 @@ CSV 必须包含表头 `source_text`。当前支持的列：
 }
 ```
 
+## 8.1 Derived Knowledge Sync
+
+After CSV or plain-text import finishes, backend derives specialized knowledge records from
+the copy analysis.
+
+- Template library: `reusable_template`, `structure`, and `suitable_scenarios`.
+- Tag library: source `industry`, `purpose`, `audience`, analysis `target_user`,
+  `emotion_buttons`, `hook`, and `expression_skills`.
+- Block library: `risk_warnings`.
+- Case library: positive performance `metrics`.
+
+Template, tag, case, and block responses keep source traceability:
+
+```json
+{
+  "source": {
+    "source_type": "raw_copy",
+    "source_id": "raw-copy-id",
+    "source_display": "source copy excerpt"
+  }
+}
+```
+
+Frontend should render `source.source_display` when present. Keep `source.source_id`
+for detail navigation and API calls.
+
 ### CopyAsset Delete
 
 用于 `DELETE /api/copy/assets/{asset_id}`。
