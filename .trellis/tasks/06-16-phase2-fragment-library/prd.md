@@ -44,20 +44,23 @@ Define Phase 2 for RagAgent: turn approved copy assets into reusable, searchable
 - Added idempotency by source copy ID so repeated approval does not duplicate fragments.
 - Added confidence-based routing using `FRAGMENT_AUTO_APPROVE_MIN_CONFIDENCE`.
 - Added frontend-facing schema documentation for new fragment fields and filters.
+- Added manual single-copy extraction and approved-copy backfill endpoints for assets approved before the auto-trigger existed.
+- Made extraction results visible as `created`, `skipped`, or `failed` instead of silently hiding LLM/configuration failures.
 
 ## Acceptance Criteria (Evolving)
 
-- [ ] Approved copy can produce fragment records linked to the source copy and analysis.
-- [ ] Reviewing a copy asset as `approved` starts fragment extraction automatically.
-- [ ] Fragment records include text, role, position, sequence, and context window.
-- [ ] Fragment records represent function-level spans such as hook, pain point, explanation, proof, solution, transition, and CTA.
-- [ ] Fragment list can be filtered by at least source copy, role, position, and industry.
-- [ ] Fragment list supports filters for role, position, industry, status, platform, purpose, audience, and risk level.
-- [ ] Fragment list supports keyword search through `q`.
-- [ ] Generated fragments can be corrected after extraction.
-- [ ] Generated fragments expose confidence and review status.
-- [ ] High-confidence generated fragments are immediately searchable, while low-confidence fragments require review/correction before use.
-- [ ] Phase 2 scope explicitly excludes next-sentence recommendation and draft assembly.
+- [x] Approved copy can produce fragment records linked to the source copy and analysis.
+- [x] Reviewing a copy asset as `approved` starts fragment extraction automatically.
+- [x] Existing approved copies can be backfilled through an explicit backend endpoint.
+- [x] Fragment records include text, role, position, sequence, and context window.
+- [x] Fragment records represent function-level spans such as hook, pain point, explanation, proof, solution, transition, and CTA.
+- [x] Fragment list can be filtered by at least source copy, role, position, and industry.
+- [x] Fragment list supports filters for role, position, industry, status, platform, purpose, audience, and risk level.
+- [x] Fragment list supports keyword search through `q`.
+- [x] Generated fragments can be corrected after extraction.
+- [x] Generated fragments expose confidence and review status.
+- [x] High-confidence generated fragments are immediately searchable, while low-confidence fragments require review/correction before use.
+- [x] Phase 2 scope explicitly excludes next-sentence recommendation and draft assembly.
 
 ## Decision (ADR-lite)
 

@@ -247,6 +247,35 @@ CSV 必须包含表头 `source_text`。当前支持的列：
 
 `GET /api/knowledge/fragments` 支持筛选参数：`source_copy_id`、`fragment_role`、`position`、`industry`、`status`、`platform`、`purpose`、`audience`、`risk_level`、`q`。`q` 是基于片段正文和上下文的关键词搜索，当前不是向量检索。
 
+### Fragment Extraction
+
+用于给已审核文案生成或补生成片段。
+
+- `POST /api/knowledge/fragments/extract/{source_copy_id}`：对单篇已审核文案触发片段拆解。
+- `POST /api/knowledge/fragments/extract-approved?limit=50`：批量扫描已审核文案，只给尚未生成片段的文案补生成片段。
+
+响应结构：
+
+```json
+{
+  "source_copy_id": "copy-id",
+  "status": "created | skipped | failed",
+  "fragment_count": 1,
+  "message": "optional detail"
+}
+```
+
+批量接口响应：
+
+```json
+{
+  "items": [],
+  "processed_count": 1,
+  "created_count": 1,
+  "failed_count": 0
+}
+```
+
 ### CopyAsset Delete
 
 用于 `DELETE /api/copy/assets/{asset_id}`。

@@ -12,6 +12,8 @@ from app.schemas.knowledge import (
     CaseItem,
     CaseUpdate,
     FragmentCreate,
+    FragmentExtractionBatchResponse,
+    FragmentExtractionResult,
     FragmentItem,
     FragmentUpdate,
     KnowledgeCollection,
@@ -31,6 +33,10 @@ from app.schemas.knowledge import (
     TemplateUpdate,
 )
 from app.services import knowledge
+from app.services.fragment_extraction import (
+    extract_fragments_for_approved_assets,
+    extract_fragments_for_asset_id,
+)
 
 router = APIRouter()
 
@@ -281,6 +287,16 @@ def list_fragments(
 @router.post("/fragments", response_model=FragmentItem)
 def create_fragment(payload: FragmentCreate):
     return knowledge.create_fragment(payload)
+
+
+@router.post("/fragments/extract-approved", response_model=FragmentExtractionBatchResponse)
+def extract_approved_fragments(limit: int = Query(default=50, ge=1, le=100)):
+    return extract_fragments_for_approved_assets(limit=limit)
+
+
+@router.post("/fragments/extract/{source_copy_id}", response_model=FragmentExtractionResult)
+def extract_fragments(source_copy_id: str):
+    return extract_fragments_for_asset_id(source_copy_id)
 
 
 @router.get("/fragments/{item_id}", response_model=FragmentItem)

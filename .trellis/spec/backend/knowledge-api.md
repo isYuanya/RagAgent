@@ -23,6 +23,8 @@ GET|POST   /api/knowledge/analyses
 GET|PATCH|DELETE /api/knowledge/analyses/{id}
 
 GET|POST   /api/knowledge/fragments
+POST       /api/knowledge/fragments/extract-approved
+POST       /api/knowledge/fragments/extract/{source_copy_id}
 GET|PATCH|DELETE /api/knowledge/fragments/{id}
 
 GET|POST   /api/knowledge/templates
@@ -145,9 +147,13 @@ Fragment provenance and ordering are first-class fields so filtering and future 
 - Generated fragments have `status` and `confidence`. Fragments with `confidence >= FRAGMENT_AUTO_APPROVE_MIN_CONFIDENCE` start as `approved`; lower-confidence fragments start as `pending_review`.
 - Reviewing a copy asset as `approved` automatically triggers function-level fragment extraction. The extraction must be idempotent by `source_copy_id` so repeated approvals do not duplicate fragments.
 - Fragment extraction failures must not fail the copy approval request.
+- Historical approved copy assets are not implicitly processed by server startup. Use `POST /api/knowledge/fragments/extract-approved?limit=50` to backfill approved copy assets that do not yet have fragments.
+- Use `POST /api/knowledge/fragments/extract/{source_copy_id}` to manually retry extraction for one approved copy asset.
+- Manual and batch extraction endpoints return per-copy status: `created`, `skipped`, or `failed`. LLM/configuration failures must be visible in `message` instead of being swallowed.
 - List filters currently supported by backend contract: `source_copy_id`, `fragment_role`, `position`, `industry`, `status`, `platform`, `purpose`, `audience`, `risk_level`, and `q`.
 - The `q` filter is keyword search against fragment text and context, not vector retrieval.
 - Fragment CRUD must follow the same DB-first, in-memory fallback pattern as templates/tags/cases/blocks and must be covered by API tests.
+- Backfill extraction must be idempotent by `source_copy_id`; if fragments already exist, return `skipped` with the existing fragment count.
 
 ## Copy Import Contract
 

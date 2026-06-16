@@ -238,6 +238,20 @@ class FragmentItem(FragmentCreate):
     id: str
 
 
+class FragmentExtractionResult(BaseModel):
+    source_copy_id: str
+    status: Literal["created", "skipped", "failed"]
+    fragment_count: int = Field(default=0, ge=0)
+    message: str | None = None
+
+
+class FragmentExtractionBatchResponse(BaseModel):
+    items: list[FragmentExtractionResult]
+    processed_count: int = Field(ge=0)
+    created_count: int = Field(ge=0)
+    failed_count: int = Field(ge=0)
+
+
 class KnowledgeItemListResponse(BaseModel):
     items: list[TemplateItem | TagItem | CaseItem | BlockItem | FragmentItem]
     page: int = Field(ge=1)

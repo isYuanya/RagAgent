@@ -5,8 +5,17 @@ from pydantic import BaseModel, Field, ValidationError
 from app.core.config import settings
 from app.core.llm import get_llm_client
 from app.schemas.copy import CopyAssetSummary
-from app.schemas.knowledge import FragmentCreate, FragmentItem
+from app.schemas.knowledge import (
+    FragmentCreate,
+    FragmentExtractionBatchResponse,
+    FragmentExtractionResult,
+    FragmentItem,
+)
 from app.services import knowledge
+from app.services.copy_assets import get_copy_asset, list_copy_assets
+
+
+DEFAULT_BACKFILL_LIMIT = 50
 
 
 class _GeneratedFragment(BaseModel):
@@ -23,17 +32,65 @@ class _FragmentExtractionResponse(BaseModel):
     fragments: list[_GeneratedFragment] = Field(default_factory=list)
 
 
+def extract_fragments_for_asset_id(source_copy_id: str) -> FragmentExtractionResult:
+    asset = get_copy_asset(source_copy_id)
+    if asset is None:
+        return FragmentExtractionResult(
+            source_copy_id=source_copy_id,
+            status="failed",
+            message="Copy asset not found.",
+        )
+    return _extract_fragments_result(asset)
+
+
+def extract_fragments_for_approved_assets(limit: int = DEFAULT_BACKFILL_LIMIT) -> FragmentExtractionBatchResponse:
+    assets = list_copy_assets(page=1, page_size=limit, status="approved").items
+    results = [_extract_fragments_result(asset) for asset in assets]
+    return FragmentExtractionBatchResponse(
+        items=results,
+        processed_count=len(results),
+        created_count=sum(result.fragment_count for result in results if result.status == "created"),
+        failed_count=sum(1 for result in results if result.status == "failed"),
+    )
+
+
+def _extract_fragments_result(asset: CopyAssetSummary) -> FragmentExtractionResult:
+    if asset.status != "approved":
+        return FragmentExtractionResult(
+            source_copy_id=asset.id,
+            status="skipped",
+            message="Only approved copy assets can be extracted.",
+        )
+    try:
+        existing = _existing_fragments(asset.id)
+        if existing:
+            return FragmentExtractionResult(
+                source_copy_id=asset.id,
+                status="skipped",
+                fragment_count=len(existing),
+                message="Fragments already exist for this copy asset.",
+            )
+        created = extract_fragments_for_asset(asset)
+        return FragmentExtractionResult(
+            source_copy_id=asset.id,
+            status="created",
+            fragment_count=len(created),
+        )
+    except RuntimeError as exc:
+        return FragmentExtractionResult(
+            source_copy_id=asset.id,
+            status="failed",
+            message=str(exc),
+        )
+
+
 def extract_fragments_for_asset(asset: CopyAssetSummary) -> list[FragmentItem]:
     if asset.status != "approved":
         return []
 
-    existing = knowledge.list_fragments(
-        page=1,
-        page_size=100,
-        source_copy_id=asset.id,
-    )
-    if existing.total > 0:
-        return [item for item in existing.items if isinstance(item, FragmentItem)]
+    existing = _existing_fragments(asset.id)
+    if existing:
+        return existing
 
     raw = get_llm_client().complete(_build_fragment_extraction_prompt(asset))
     try:
@@ -73,6 +130,15 @@ def extract_fragments_for_asset(asset: CopyAssetSummary) -> list[FragmentItem]:
             )
         )
     return created
+
+
+def _existing_fragments(source_copy_id: str) -> list[FragmentItem]:
+    existing = knowledge.list_fragments(
+        page=1,
+        page_size=100,
+        source_copy_id=source_copy_id,
+    )
+    return [item for item in existing.items if isinstance(item, FragmentItem)]
 
 
 def _build_fragment_extraction_prompt(asset: CopyAssetSummary) -> str:

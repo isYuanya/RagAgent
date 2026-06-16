@@ -123,6 +123,38 @@ class FragmentExtractionLLMClient:
         }"""
 
 
+class BackfillFragmentExtractionLLMClient:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def complete(self, prompt: str) -> str:
+        self.calls += 1
+        if self.calls == 1:
+            return """{
+                "source_text": "Check your routine before changing products.",
+                "platform": "xiaohongshu",
+                "industry": "beauty",
+                "audience": "new users",
+                "purpose": "education",
+                "style": "professional",
+                "metrics": {}
+            }"""
+        if self.calls == 2:
+            return HighConfidenceLLMClient().complete(prompt)
+        return """{
+            "fragments": [
+                {
+                    "fragment_text": "Check your routine before changing products.",
+                    "fragment_role": "hook",
+                    "position": "opening",
+                    "source_quality": "high",
+                    "risk_level": "low",
+                    "confidence": 0.91
+                }
+            ]
+        }"""
+
+
 def test_health_check() -> None:
     response = client.get("/api/health")
     assert response.status_code == 200
@@ -418,6 +450,37 @@ def test_approving_copy_asset_auto_extracts_fragments(monkeypatch) -> None:
     assert second_review_response.status_code == 200
     all_fragments_response = client.get(f"/api/knowledge/fragments?source_copy_id={asset_id}")
     assert all_fragments_response.json()["total"] == 2
+
+
+def test_backfill_extracts_fragments_for_existing_approved_assets(monkeypatch) -> None:
+    reset_copy_asset_store()
+    llm_client = BackfillFragmentExtractionLLMClient()
+    monkeypatch.setattr("app.services.copy_analysis.get_llm_client", lambda: llm_client)
+    monkeypatch.setattr("app.services.fragment_extraction.get_llm_client", lambda: llm_client)
+    monkeypatch.setattr("app.api.routes.copy.enqueue_text_import", lambda text, collection_ids=None: __import__(
+        "app.services.copy_import_jobs", fromlist=["run_text_import_task"]
+    ).run_text_import_task(text, collection_ids=collection_ids or []))
+
+    response = client.post("/api/copy/import", json={"text": "auto approved old copy"})
+    assert response.status_code == 200
+    asset_id = response.json()["result"]["asset_ids"][0]
+    asset_response = client.get(f"/api/copy/assets/{asset_id}")
+    assert asset_response.json()["status"] == "approved"
+
+    empty_fragments_response = client.get(f"/api/knowledge/fragments?source_copy_id={asset_id}")
+    assert empty_fragments_response.status_code == 200
+    assert empty_fragments_response.json()["total"] == 0
+
+    backfill_response = client.post("/api/knowledge/fragments/extract-approved")
+    assert backfill_response.status_code == 200
+    backfill_payload = backfill_response.json()
+    assert backfill_payload["processed_count"] == 1
+    assert backfill_payload["created_count"] == 1
+    assert backfill_payload["failed_count"] == 0
+
+    fragments_response = client.get(f"/api/knowledge/fragments?source_copy_id={asset_id}")
+    assert fragments_response.status_code == 200
+    assert fragments_response.json()["total"] == 1
 
 
 def test_copy_asset_list_merges_db_and_redis_assets(monkeypatch) -> None:
