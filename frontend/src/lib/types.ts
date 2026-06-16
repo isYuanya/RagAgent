@@ -88,6 +88,11 @@ export type KnowledgeCollectionCreate = {
   metadata?: Record<string, unknown>;
 };
 
+export type SourceReference = {
+  source_type: "raw_copy" | "analysis";
+  source_id: string;
+};
+
 export type RawCopySummary = CopyAsset & {
   collection_ids: string[];
   collections: KnowledgeCollection[];
@@ -100,6 +105,68 @@ export type AnalysisSummary = {
   reviewed_analysis?: Analysis | null;
   status: string;
 };
+
+export type KnowledgeTemplate = {
+  id: string;
+  title: string;
+  content: string;
+  structure: string[];
+  suitable_scenarios: string[];
+  source?: SourceReference | null;
+  metadata: Record<string, unknown>;
+};
+
+export type KnowledgeTemplateCreate = Omit<KnowledgeTemplate, "id">;
+
+export type TagCategory =
+  | "industry"
+  | "emotion"
+  | "purpose"
+  | "audience"
+  | "hook_type"
+  | "custom";
+
+export type KnowledgeTag = {
+  id: string;
+  name: string;
+  category: TagCategory;
+  description?: string | null;
+  source?: SourceReference | null;
+  metadata: Record<string, unknown>;
+};
+
+export type KnowledgeTagCreate = Omit<KnowledgeTag, "id">;
+
+export type KnowledgeCase = {
+  id: string;
+  title: string;
+  reason: string;
+  performance_summary?: string | null;
+  source?: SourceReference | null;
+  metadata: Record<string, unknown>;
+};
+
+export type KnowledgeCaseCreate = Omit<KnowledgeCase, "id">;
+
+export type BlockType =
+  | "sensitive_word"
+  | "violation"
+  | "do_not_copy"
+  | "custom";
+
+export type BlockSeverity = "low" | "medium" | "high";
+
+export type KnowledgeBlock = {
+  id: string;
+  content: string;
+  block_type: BlockType;
+  reason?: string | null;
+  severity: BlockSeverity;
+  source?: SourceReference | null;
+  metadata: Record<string, unknown>;
+};
+
+export type KnowledgeBlockCreate = Omit<KnowledgeBlock, "id">;
 
 export const emptyAnalysis: Analysis = {
   topic: "",

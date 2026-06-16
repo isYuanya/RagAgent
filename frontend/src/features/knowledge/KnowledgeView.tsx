@@ -6,13 +6,25 @@ import type { KnowledgeCollection } from "@/lib/types";
 import { CollectionsPanel } from "./CollectionsPanel";
 import { RawCopiesPanel } from "./RawCopiesPanel";
 import { AnalysesPanel } from "./AnalysesPanel";
+import { ManualKnowledgePanel } from "./ManualKnowledgePanel";
 
-type KbTab = "collections" | "raw-copies" | "analyses";
+type KbTab =
+  | "collections"
+  | "raw-copies"
+  | "analyses"
+  | "templates"
+  | "tags"
+  | "cases"
+  | "blocks";
 
 const TABS: Array<{ key: KbTab; label: string }> = [
   { key: "collections", label: "集合" },
   { key: "raw-copies", label: "原始文案库" },
-  { key: "analyses", label: "结构化拆解库" }
+  { key: "analyses", label: "结构化拆解库" },
+  { key: "templates", label: "模板库" },
+  { key: "tags", label: "标签库" },
+  { key: "cases", label: "案例库" },
+  { key: "blocks", label: "禁用库" }
 ];
 
 export function KnowledgeView() {
@@ -42,10 +54,10 @@ export function KnowledgeView() {
         <div>
           <h1 className="text-lg font-semibold">知识库</h1>
           <p className="text-sm text-muted-foreground">
-            管理集合，浏览沉淀的原始文案与结构化拆解。
+            管理集合，浏览沉淀的原始文案、结构化拆解和人工维护素材。
           </p>
         </div>
-        <div className="flex gap-1 rounded-lg border border-border bg-muted/40 p-1">
+        <div className="flex max-w-3xl flex-wrap justify-end gap-1 rounded-lg border border-border bg-muted/40 p-1">
           {TABS.map((item) => (
             <button
               key={item.key}
@@ -73,8 +85,10 @@ export function KnowledgeView() {
           />
         ) : tab === "raw-copies" ? (
           <RawCopiesPanel collections={collections} />
-        ) : (
+        ) : tab === "analyses" ? (
           <AnalysesPanel />
+        ) : (
+          <ManualKnowledgePanel kind={tab} />
         )}
       </div>
     </main>

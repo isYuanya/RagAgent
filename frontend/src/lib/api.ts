@@ -3,8 +3,16 @@ import type {
   AnalysisSummary,
   AssetListResponse,
   CopyAsset,
+  KnowledgeBlock,
+  KnowledgeBlockCreate,
+  KnowledgeCase,
+  KnowledgeCaseCreate,
   KnowledgeCollection,
   KnowledgeCollectionCreate,
+  KnowledgeTag,
+  KnowledgeTagCreate,
+  KnowledgeTemplate,
+  KnowledgeTemplateCreate,
   ListResponse,
   RawCopySummary,
   TaskResponse
@@ -171,4 +179,103 @@ export async function fetchAnalyses(): Promise<AnalysisSummary[]> {
 
 export function deleteAnalysis(id: string): Promise<void> {
   return deleteResource(`${knowledgeBase}/analyses/${id}`, "删除拆解失败");
+}
+// templates
+
+export async function fetchTemplates(): Promise<KnowledgeTemplate[]> {
+  const response = await fetch(`${knowledgeBase}/templates?page=1&page_size=100`);
+  if (!response.ok) throw new Error("加载模板库失败");
+  const payload = (await response.json()) as ListResponse<KnowledgeTemplate>;
+  return payload.items;
+}
+
+export function createTemplate(
+  body: KnowledgeTemplateCreate
+): Promise<KnowledgeTemplate> {
+  return writeJson(`${knowledgeBase}/templates`, "POST", body, "创建模板失败");
+}
+
+export function updateTemplate(
+  id: string,
+  body: Partial<KnowledgeTemplateCreate>
+): Promise<KnowledgeTemplate> {
+  return writeJson(`${knowledgeBase}/templates/${id}`, "PATCH", body, "更新模板失败");
+}
+
+export function deleteTemplate(id: string): Promise<void> {
+  return deleteResource(`${knowledgeBase}/templates/${id}`, "删除模板失败");
+}
+
+// tags
+
+export async function fetchTags(): Promise<KnowledgeTag[]> {
+  const response = await fetch(`${knowledgeBase}/tags?page=1&page_size=100`);
+  if (!response.ok) throw new Error("加载标签库失败");
+  const payload = (await response.json()) as ListResponse<KnowledgeTag>;
+  return payload.items;
+}
+
+export function createTag(body: KnowledgeTagCreate): Promise<KnowledgeTag> {
+  return writeJson(`${knowledgeBase}/tags`, "POST", body, "创建标签失败");
+}
+
+export function updateTag(
+  id: string,
+  body: Partial<KnowledgeTagCreate>
+): Promise<KnowledgeTag> {
+  return writeJson(`${knowledgeBase}/tags/${id}`, "PATCH", body, "更新标签失败");
+}
+
+export function deleteTag(id: string): Promise<void> {
+  return deleteResource(`${knowledgeBase}/tags/${id}`, "删除标签失败");
+}
+
+// cases
+
+export async function fetchCases(): Promise<KnowledgeCase[]> {
+  const response = await fetch(`${knowledgeBase}/cases?page=1&page_size=100`);
+  if (!response.ok) throw new Error("加载案例库失败");
+  const payload = (await response.json()) as ListResponse<KnowledgeCase>;
+  return payload.items;
+}
+
+export function createCase(body: KnowledgeCaseCreate): Promise<KnowledgeCase> {
+  return writeJson(`${knowledgeBase}/cases`, "POST", body, "创建案例失败");
+}
+
+export function updateCase(
+  id: string,
+  body: Partial<KnowledgeCaseCreate>
+): Promise<KnowledgeCase> {
+  return writeJson(`${knowledgeBase}/cases/${id}`, "PATCH", body, "更新案例失败");
+}
+
+export function deleteCase(id: string): Promise<void> {
+  return deleteResource(`${knowledgeBase}/cases/${id}`, "删除案例失败");
+}
+
+// blocks
+
+export async function fetchBlocks(): Promise<KnowledgeBlock[]> {
+  const response = await fetch(`${knowledgeBase}/blocks?page=1&page_size=100`);
+  if (!response.ok) throw new Error("加载禁用库失败");
+  const payload = (await response.json()) as ListResponse<KnowledgeBlock>;
+  return payload.items;
+}
+
+export function createBlock(
+  body: KnowledgeBlockCreate
+): Promise<KnowledgeBlock> {
+  return writeJson(`${knowledgeBase}/blocks`, "POST", body, "创建禁用项失败");
+}
+
+export function updateBlock(
+  id: string,
+  body: Partial<KnowledgeBlockCreate>
+): Promise<KnowledgeBlock> {
+  return writeJson(`${knowledgeBase}/blocks/${id}`, "PATCH", body, "更新禁用项失败");
+}
+
+export function deleteBlock(id: string): Promise<void> {
+  return deleteResource(`${knowledgeBase}/blocks/${id}`, "删除禁用项失败");
 }
