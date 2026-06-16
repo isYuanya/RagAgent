@@ -158,6 +158,8 @@ Fragment provenance and ordering are first-class fields so filtering and future 
   - `source_text`, `source_url`, `author_name`, `author_url`, `author_follower_count`, `platform`, `industry`, `audience`, `purpose`, `style`, and `metrics`.
   - If metadata extraction fails or returns invalid JSON, import must continue with the raw pasted text as `source_text`.
   - Extracted numeric strings such as `52,000`, `5.2万`, or `52k` should be normalized to non-negative integers where possible.
+  - If the LLM returns blank metadata, backend should apply Chinese pattern fallback for common pasted labels such as `平台：小红书`, `作者：护肤研究员`, `粉丝：5.2万`, `正文：...`, and `指标：点赞120 评论8 收藏35 分享4`.
+  - Fallback metadata must be stored on `CopyAssetSummary` first-class fields so frontend review chips can display author, platform, follower count, industry, audience, purpose, style, content type, structure type, metrics, and storage backend from `/api/copy/assets`.
 - CSV import must tolerate a UTF-8 BOM before the `source_text` header.
 - LLM review is the primary first pass:
   - If `auto_analysis.confidence >= COPY_AUTO_APPROVE_MIN_CONFIDENCE`, the imported asset starts with `status = approved`.

@@ -5,6 +5,7 @@ from uuid import uuid4
 from sqlalchemy import delete, insert, select
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.core.config import settings
 from app.db.session import SessionLocal
 from app.models.knowledge import (
     KnowledgeAnalysis,
@@ -73,13 +74,13 @@ class _Store:
 
 
 _store = _Store()
-_db_available: bool | None = None
+_db_available: bool | None = False if settings.app_env == "test" else None
 
 
 def reset_knowledge_store() -> None:
     global _db_available, _store
     _store = _Store()
-    _db_available = None
+    _db_available = False if settings.app_env == "test" else None
 
 
 def list_collections(page: int = 1, page_size: int = 20) -> KnowledgeCollectionListResponse:

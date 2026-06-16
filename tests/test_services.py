@@ -1,7 +1,8 @@
+from app.core.config import settings
 from app.schemas.copy import CopyAnalysisRequest
 from app.schemas.generate import GenerateRequest
-from app.services.copy_assets import import_copy_assets, reset_copy_asset_store
-from app.services.copy_analysis import analyze_copy
+from app.services.copy_assets import create_copy_asset, import_copy_assets, reset_copy_asset_store
+from app.services.copy_analysis import analyze_copy, extract_text_import_payload
 from app.services.copy_import_jobs import run_copy_import_task
 from app.services.generation import generate_copy
 from app.workers.tasks import get_task
@@ -59,6 +60,15 @@ def test_import_copy_assets_reports_row_errors_and_assets(monkeypatch) -> None:
     assert result.errors[0].row_number == 3
 
 
+def test_pytest_runtime_uses_memory_copy_asset_store() -> None:
+    reset_copy_asset_store()
+
+    asset = create_copy_asset(CopyAnalysisRequest(source_text="isolated test copy"), None)
+
+    assert settings.app_env == "test"
+    assert asset.storage_backend == "memory"
+
+
 def test_import_copy_assets_preserves_author_fields(monkeypatch) -> None:
     reset_copy_asset_store()
     monkeypatch.setattr("app.services.copy_analysis.get_llm_client", lambda: FakeLLMClient())
@@ -74,6 +84,48 @@ def test_import_copy_assets_preserves_author_fields(monkeypatch) -> None:
     assert result.assets[0].author_name == "护肤研究员"
     assert result.assets[0].author_url == "https://example.com/author/1"
     assert result.assets[0].author_follower_count == 52000
+
+
+def test_text_import_payload_preserves_extracted_metadata(monkeypatch) -> None:
+    class MetadataLLMClient:
+        def complete(self, prompt: str) -> str:
+            return """{
+                "source_text": "先别急着换产品，先检查护肤顺序。",
+                "source_url": "https://example.com/post/1",
+                "author_name": "护肤研究员",
+                "author_url": "https://example.com/author/1",
+                "author_follower_count": "5.2万",
+                "platform": "小红书",
+                "industry": "美妆",
+                "audience": "新手护肤用户",
+                "purpose": "引流",
+                "style": "专业",
+                "structure_type": "痛点放大型",
+                "content_type": "种草",
+                "metrics": {
+                    "likes": "120",
+                    "comments": "8",
+                    "favorites": "35",
+                    "shares": "4"
+                }
+            }"""
+
+    monkeypatch.setattr("app.services.copy_analysis.get_llm_client", lambda: MetadataLLMClient())
+
+    payload = extract_text_import_payload("账号：护肤研究员\n粉丝：5.2万\n正文：先别急着换产品。")
+    asset = create_copy_asset(payload, None)
+
+    assert asset.source_text == "先别急着换产品，先检查护肤顺序。"
+    assert asset.author_name == "护肤研究员"
+    assert asset.author_follower_count == 52000
+    assert asset.platform == "小红书"
+    assert asset.industry == "美妆"
+    assert asset.audience == "新手护肤用户"
+    assert asset.purpose == "引流"
+    assert asset.style == "专业"
+    assert asset.structure_type == "痛点放大型"
+    assert asset.content_type == "种草"
+    assert asset.metrics == {"likes": 120, "comments": 8, "favorites": 35, "shares": 4}
 
 
 def test_import_copy_assets_rejects_invalid_author_follower_count(monkeypatch) -> None:

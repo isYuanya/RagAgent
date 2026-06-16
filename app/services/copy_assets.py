@@ -30,15 +30,17 @@ METRIC_FIELDS = ("likes", "comments", "favorites", "shares")
 AUTHOR_FOLLOWER_FIELD = "author_follower_count"
 
 _copy_assets: dict[str, CopyAssetSummary] = {}
-_db_available: bool | None = None
+_db_available: bool | None = False if settings.app_env == "test" else None
 _REDIS_ASSET_HASH = "ragagent:copy_assets"
 _REDIS_ASSET_ORDER = "ragagent:copy_asset_order"
 
 
 def reset_copy_asset_store() -> None:
     global _db_available
-    _db_available = None
+    _db_available = False if settings.app_env == "test" else None
     _copy_assets.clear()
+    if _persistent_backends_disabled():
+        return
     try:
         redis = _redis()
         redis.delete(_REDIS_ASSET_HASH, _REDIS_ASSET_ORDER)
@@ -222,6 +224,8 @@ def parse_copy_import_row(
         audience=_blank_to_none(row.get("audience")),
         purpose=_blank_to_none(row.get("purpose")),
         style=_blank_to_none(row.get("style")),
+        structure_type=_blank_to_none(row.get("structure_type")),
+        content_type=_blank_to_none(row.get("content_type")),
         metrics=metric_result,
     )
 
@@ -252,6 +256,8 @@ def create_copy_asset(
         audience=payload.audience,
         purpose=payload.purpose,
         style=payload.style,
+        structure_type=payload.structure_type,
+        content_type=payload.content_type,
         metrics=payload.metrics or {},
         status=status,
         auto_analysis=analysis,
@@ -267,7 +273,7 @@ def create_copy_asset(
 
 
 def _persist_asset_to_db(asset: CopyAssetSummary, collection_ids: list[str]) -> bool:
-    if _db_available is False:
+    if _persistent_backends_disabled() or _db_available is False:
         return False
     db = SessionLocal()
     try:
@@ -330,7 +336,7 @@ def _list_db_assets(
 
 
 def _get_db_asset(asset_id: str) -> CopyAssetSummary | None:
-    if _db_available is False:
+    if _persistent_backends_disabled() or _db_available is False:
         return None
     db = SessionLocal()
     try:
@@ -346,7 +352,7 @@ def _get_db_asset(asset_id: str) -> CopyAssetSummary | None:
 
 
 def _review_db_asset(asset_id: str, payload: CopyAssetReviewRequest) -> CopyAssetSummary | None:
-    if _db_available is False:
+    if _persistent_backends_disabled() or _db_available is False:
         return None
     db = SessionLocal()
     try:
@@ -369,7 +375,7 @@ def _review_db_asset(asset_id: str, payload: CopyAssetReviewRequest) -> CopyAsse
 
 
 def _delete_db_asset(asset_id: str) -> Literal["deleted", "not_found", "conflict"] | None:
-    if _db_available is False:
+    if _persistent_backends_disabled() or _db_available is False:
         return None
     db = SessionLocal()
     try:
@@ -418,6 +424,8 @@ def _source_to_asset(db, source: CopySource) -> CopyAssetSummary:
         audience=metadata.get("audience"),
         purpose=metadata.get("purpose"),
         style=metadata.get("style"),
+        structure_type=metadata.get("structure_type"),
+        content_type=metadata.get("content_type"),
         metrics=metadata.get("metrics") or {},
         status=metadata.get("status") or "pending_review",
         auto_analysis=auto_analysis,
@@ -466,6 +474,8 @@ def _asset_metadata(asset: CopyAssetSummary) -> dict:
         "audience": asset.audience,
         "purpose": asset.purpose,
         "style": asset.style,
+        "structure_type": asset.structure_type,
+        "content_type": asset.content_type,
         "author_name": asset.author_name,
         "author_url": asset.author_url,
         "author_follower_count": asset.author_follower_count,
@@ -522,6 +532,8 @@ def _redis() -> Redis:
 
 
 def _save_redis_asset(asset: CopyAssetSummary) -> None:
+    if _persistent_backends_disabled():
+        return
     try:
         redis = _redis()
         redis.hset(_REDIS_ASSET_HASH, asset.id, json.dumps(asset.model_dump(mode="json"), ensure_ascii=False))
@@ -532,6 +544,8 @@ def _save_redis_asset(asset: CopyAssetSummary) -> None:
 
 
 def _get_redis_asset(asset_id: str) -> CopyAssetSummary | None:
+    if _persistent_backends_disabled():
+        return None
     try:
         raw = _redis().hget(_REDIS_ASSET_HASH, asset_id)
     except RedisError:
@@ -564,7 +578,7 @@ def _list_redis_assets(
 
 
 def _get_db_asset_items() -> list[CopyAssetSummary] | None:
-    if _db_available is False:
+    if _persistent_backends_disabled() or _db_available is False:
         return None
     db = SessionLocal()
     try:
@@ -582,6 +596,8 @@ def _get_db_asset_items() -> list[CopyAssetSummary] | None:
 
 
 def _get_redis_asset_items() -> list[CopyAssetSummary] | None:
+    if _persistent_backends_disabled():
+        return None
     try:
         redis = _redis()
         ids = [item.decode("utf-8") for item in redis.lrange(_REDIS_ASSET_ORDER, 0, -1)]
@@ -623,6 +639,8 @@ def _review_redis_asset(asset_id: str, payload: CopyAssetReviewRequest) -> CopyA
 
 
 def _delete_redis_asset(asset_id: str) -> None:
+    if _persistent_backends_disabled():
+        return
     try:
         redis = _redis()
         redis.hdel(_REDIS_ASSET_HASH, asset_id)
@@ -640,6 +658,10 @@ def _blank_to_none(value: str | None) -> str | None:
         return None
     stripped = value.strip()
     return stripped or None
+
+
+def _persistent_backends_disabled() -> bool:
+    return settings.app_env == "test"
 
 
 def _parse_optional_non_negative_int(value: str | None) -> int | None | str:

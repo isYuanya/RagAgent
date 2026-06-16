@@ -70,6 +70,17 @@ class TextMetadataLLMClient:
         return FakeLLMClient().complete(prompt)
 
 
+class EmptyMetadataLLMClient:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def complete(self, prompt: str) -> str:
+        self.calls += 1
+        if self.calls == 1:
+            return "{}"
+        return FakeLLMClient().complete(prompt)
+
+
 def test_health_check() -> None:
     response = client.get("/api/health")
     assert response.status_code == 200
@@ -223,6 +234,47 @@ def test_import_plain_text_extracts_embedded_metadata(monkeypatch) -> None:
     assert item["audience"] == "new users"
     assert item["purpose"] == "education"
     assert item["style"] == "professional"
+    assert item["metrics"] == {"likes": 120, "comments": 8, "favorites": 35, "shares": 4}
+
+
+def test_import_plain_text_falls_back_to_chinese_metadata_patterns(monkeypatch) -> None:
+    reset_copy_asset_store()
+    llm_client = EmptyMetadataLLMClient()
+    monkeypatch.setattr("app.services.copy_analysis.get_llm_client", lambda: llm_client)
+    monkeypatch.setattr("app.api.routes.copy.enqueue_text_import", lambda text, collection_ids=None: __import__(
+        "app.services.copy_import_jobs", fromlist=["run_text_import_task"]
+    ).run_text_import_task(text, collection_ids=collection_ids or []))
+
+    response = client.post(
+        "/api/copy/import",
+        json={
+            "text": (
+                "平台：小红书\n"
+                "作者：护肤研究员\n"
+                "粉丝：5.2万\n"
+                "行业：美妆\n"
+                "目标人群：新手护肤用户\n"
+                "目的：种草\n"
+                "风格：专业\n"
+                "指标：点赞120 评论8 收藏35 分享4\n"
+                "正文：先别急着换产品，可能是护肤顺序错了。"
+            )
+        },
+    )
+
+    assert response.status_code == 200
+
+    list_response = client.get("/api/copy/assets")
+    assert list_response.status_code == 200
+    item = list_response.json()["items"][0]
+    assert item["source_text"] == "先别急着换产品，可能是护肤顺序错了。"
+    assert item["author_name"] == "护肤研究员"
+    assert item["author_follower_count"] == 52000
+    assert item["platform"] == "小红书"
+    assert item["industry"] == "美妆"
+    assert item["audience"] == "新手护肤用户"
+    assert item["purpose"] == "种草"
+    assert item["style"] == "专业"
     assert item["metrics"] == {"likes": 120, "comments": 8, "favorites": 35, "shares": 4}
 
 
