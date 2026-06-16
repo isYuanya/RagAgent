@@ -30,10 +30,14 @@ export type CopyAsset = {
   audience?: string | null;
   purpose?: string | null;
   style?: string | null;
+  structure_type?: string | null;
+  content_type?: string | null;
   metrics: Record<string, number>;
   status: string;
   auto_analysis?: Analysis | null;
   reviewed_analysis?: Analysis | null;
+  storage_backend?: string;
+  collection_ids?: string[];
 };
 
 export type AssetListResponse = {

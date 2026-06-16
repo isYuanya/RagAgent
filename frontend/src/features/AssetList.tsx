@@ -9,7 +9,7 @@ import {
   SelectValue
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
+import { cn, formatFollowers } from "@/lib/utils";
 import type { CopyAsset } from "@/lib/types";
 import { StatusBadge, STATUS_LABELS } from "./StatusBadge";
 import { EmptyState } from "./shared/EmptyState";
@@ -195,7 +195,7 @@ function AssetRow({
         </div>
         <div className="mt-1 line-clamp-1 text-xs text-muted-foreground">
           {asset.author_name ?? "未标作者"} · {asset.platform ?? "未标平台"} ·{" "}
-          {asset.industry ?? "未标行业"}
+          {asset.industry ?? "未标行业"} · {formatFollowers(asset.author_follower_count)}
         </div>
       </button>
       <Button

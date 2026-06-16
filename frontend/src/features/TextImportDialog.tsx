@@ -56,10 +56,13 @@ export function TextImportDialog({
             id="plain-copy-text"
             value={text}
             onChange={(event) => setText(event.target.value)}
-            placeholder="粘贴一段要拆解和沉淀的原始文案"
+            placeholder="粘贴一段要拆解和沉淀的原始文案；如果文本里包含作者、粉丝数、平台等信息，后端会自动提取并保存。"
             className="min-h-[220px]"
             disabled={busy}
           />
+          <p className="text-xs text-muted-foreground">
+            支持直接粘贴带来源信息的完整文本，导入完成后会在列表和详情里展示作者、粉丝数等元数据。
+          </p>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)} disabled={busy}>

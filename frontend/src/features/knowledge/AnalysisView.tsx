@@ -24,8 +24,13 @@ export function AnalysisView({
             <MetaPill>{asset.audience ?? "未标人群"}</MetaPill>
             <MetaPill>{asset.purpose ?? "未标目的"}</MetaPill>
             <MetaPill>{asset.style ?? "未标风格"}</MetaPill>
+            <MetaPill>{asset.content_type ?? "未标内容类型"}</MetaPill>
+            <MetaPill>{asset.structure_type ?? "未标结构类型"}</MetaPill>
             <MetaPill>{formatFollowers(asset.author_follower_count)}</MetaPill>
             <MetaPill>{formatMetrics(asset.metrics)}</MetaPill>
+            {asset.storage_backend ? (
+              <MetaPill>存储：{asset.storage_backend}</MetaPill>
+            ) : null}
           </div>
           {asset.author_url ? (
             <a
