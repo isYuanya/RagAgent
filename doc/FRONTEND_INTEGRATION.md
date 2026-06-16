@@ -584,6 +584,16 @@ GET /api/knowledge/blocks
 GET /api/knowledge/cases
 ```
 
+If the imported copy asset is auto-approved by LLM confidence, backend also triggers
+function-level fragment extraction immediately. Frontend can refresh:
+
+```text
+GET /api/knowledge/fragments?source_copy_id=<asset_id>
+```
+
+If the asset stays `pending_review`, fragments are created later after approval or
+manual extraction.
+
 Source reference responses include `source_display`:
 
 ```json

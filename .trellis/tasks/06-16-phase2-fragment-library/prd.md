@@ -48,6 +48,7 @@ Define Phase 2 for RagAgent: turn approved copy assets into reusable, searchable
 - Made extraction results visible as `created`, `skipped`, or `failed` instead of silently hiding LLM/configuration failures.
 - Added import-time synchronization from copy analysis into specialized knowledge libraries: templates, tags, blocks, and cases.
 - Added `source_display` on source references so frontend can show a raw-copy excerpt instead of only a UUID.
+- Added import-time fragment extraction for copy assets that are auto-approved by LLM confidence.
 
 ## Acceptance Criteria (Evolving)
 

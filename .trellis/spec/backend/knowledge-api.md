@@ -148,6 +148,8 @@ Fragment provenance and ordering are first-class fields so filtering and future 
 - Weak tags and source metadata are plain API fields for now: `industry`, `platform`, `purpose`, `audience`, `source_quality`, and `risk_level`. Do not hard-code product taxonomy in service logic until a taxonomy service exists.
 - Generated fragments have `status` and `confidence`. Fragments with `confidence >= FRAGMENT_AUTO_APPROVE_MIN_CONFIDENCE` start as `approved`; lower-confidence fragments start as `pending_review`.
 - Reviewing a copy asset as `approved` automatically triggers function-level fragment extraction. The extraction must be idempotent by `source_copy_id` so repeated approvals do not duplicate fragments.
+- Imported copy assets that are auto-approved by LLM confidence must also automatically trigger function-level fragment extraction during import post-processing.
+- Imported copy assets that remain `pending_review` must not create generated fragments until they are approved or manually extracted.
 - Fragment extraction failures must not fail the copy approval request.
 - Historical approved copy assets are not implicitly processed by server startup. Use `POST /api/knowledge/fragments/extract-approved?limit=50` to backfill approved copy assets that do not yet have fragments.
 - Use `POST /api/knowledge/fragments/extract/{source_copy_id}` to manually retry extraction for one approved copy asset.
@@ -189,6 +191,7 @@ Fragment provenance and ordering are first-class fields so filtering and future 
   - Non-empty positive `metrics` create a case item with a performance summary.
 - Derived knowledge items are idempotent by source asset id, derived kind, and derived content key, so repeated imports/reviews do not create duplicates for the same analysis content.
 - Derived templates/tags/cases/blocks must keep `source.source_type = raw_copy`, `source.source_id = copy asset id`, and a frontend-friendly `source.source_display` excerpt.
+- Import post-processing must also trigger fragment extraction when the imported asset status is already `approved`, using the same idempotent path as manual extraction.
 
 ## Copy Asset Delete Contract
 

@@ -1,8 +1,10 @@
+import json
+
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.schemas.copy import CopyAssetSummary
-from app.services.copy_assets import list_copy_assets, reset_copy_asset_store
+from app.schemas.copy import CopyAnalysisRequest, CopyAnalysisResponse, CopyAssetSummary
+from app.services.copy_assets import create_copy_asset, list_copy_assets, reset_copy_asset_store
 from app.services.knowledge import reset_knowledge_store
 
 
@@ -146,6 +148,44 @@ class BackfillFragmentExtractionLLMClient:
             "fragments": [
                 {
                     "fragment_text": "Check your routine before changing products.",
+                    "fragment_role": "hook",
+                    "position": "opening",
+                    "source_quality": "high",
+                    "risk_level": "low",
+                    "confidence": 0.91
+                }
+            ]
+        }"""
+
+
+class AutoApprovedImportFragmentLLMClient:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def complete(self, prompt: str) -> str:
+        self.calls += 1
+        if self.calls == 1:
+            return HighConfidenceLLMClient().complete(prompt)
+        return """{
+            "fragments": [
+                {
+                    "fragment_text": "Auto approved copy should become a fragment.",
+                    "fragment_role": "hook",
+                    "position": "opening",
+                    "source_quality": "high",
+                    "risk_level": "low",
+                    "confidence": 0.91
+                }
+            ]
+        }"""
+
+
+class FragmentOnlyLLMClient:
+    def complete(self, prompt: str) -> str:
+        return """{
+            "fragments": [
+                {
+                    "fragment_text": "Historical approved copy becomes a fragment.",
                     "fragment_role": "hook",
                     "position": "opening",
                     "source_quality": "high",
@@ -468,6 +508,41 @@ def test_high_confidence_import_is_auto_approved(monkeypatch) -> None:
     assert delete_response.status_code == 409
 
 
+def test_auto_approved_import_auto_extracts_fragments(monkeypatch) -> None:
+    reset_copy_asset_store()
+    reset_knowledge_store()
+    llm_client = AutoApprovedImportFragmentLLMClient()
+    monkeypatch.setattr("app.services.copy_analysis.get_llm_client", lambda: llm_client)
+    monkeypatch.setattr("app.services.fragment_extraction.get_llm_client", lambda: llm_client)
+    monkeypatch.setattr("app.api.routes.copy.enqueue_copy_import", lambda csv_text, collection_ids=None: __import__(
+        "app.services.copy_import_jobs", fromlist=["run_copy_import_task"]
+    ).run_copy_import_task(csv_text, collection_ids=collection_ids or []))
+
+    response = client.post(
+        "/api/copy/import",
+        json={
+            "csv_text": (
+                "source_text,platform,industry,audience,purpose\n"
+                "Auto approved copy should become a fragment.,xiaohongshu,beauty,new users,education\n"
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    asset_id = response.json()["result"]["asset_ids"][0]
+    asset_response = client.get(f"/api/copy/assets/{asset_id}")
+    assert asset_response.json()["status"] == "approved"
+
+    fragments_response = client.get(f"/api/knowledge/fragments?source_copy_id={asset_id}")
+    assert fragments_response.status_code == 200
+    fragments_payload = fragments_response.json()
+    assert fragments_payload["total"] == 1
+    fragment = fragments_payload["items"][0]
+    assert fragment["fragment_text"] == "Auto approved copy should become a fragment."
+    assert fragment["platform"] == "xiaohongshu"
+    assert fragment["status"] == "approved"
+
+
 def test_approving_copy_asset_auto_extracts_fragments(monkeypatch) -> None:
     reset_copy_asset_store()
     llm_client = FragmentExtractionLLMClient()
@@ -528,20 +603,22 @@ def test_approving_copy_asset_auto_extracts_fragments(monkeypatch) -> None:
 
 def test_backfill_extracts_fragments_for_existing_approved_assets(monkeypatch) -> None:
     reset_copy_asset_store()
-    llm_client = BackfillFragmentExtractionLLMClient()
-    monkeypatch.setattr("app.services.copy_analysis.get_llm_client", lambda: llm_client)
-    monkeypatch.setattr("app.services.fragment_extraction.get_llm_client", lambda: llm_client)
-    monkeypatch.setattr("app.api.routes.copy.enqueue_text_import", lambda text, collection_ids=None: __import__(
-        "app.services.copy_import_jobs", fromlist=["run_text_import_task"]
-    ).run_text_import_task(text, collection_ids=collection_ids or []))
+    reset_knowledge_store()
+    monkeypatch.setattr("app.services.fragment_extraction.get_llm_client", lambda: FragmentOnlyLLMClient())
+    analysis = CopyAnalysisResponse.model_validate(json.loads(HighConfidenceLLMClient().complete("")))
+    asset = create_copy_asset(
+        CopyAnalysisRequest(
+            source_text="Historical approved copy becomes a fragment.",
+            platform="xiaohongshu",
+            industry="beauty",
+            audience="new users",
+            purpose="education",
+        ),
+        analysis,
+    )
+    assert asset.status == "approved"
 
-    response = client.post("/api/copy/import", json={"text": "auto approved old copy"})
-    assert response.status_code == 200
-    asset_id = response.json()["result"]["asset_ids"][0]
-    asset_response = client.get(f"/api/copy/assets/{asset_id}")
-    assert asset_response.json()["status"] == "approved"
-
-    empty_fragments_response = client.get(f"/api/knowledge/fragments?source_copy_id={asset_id}")
+    empty_fragments_response = client.get(f"/api/knowledge/fragments?source_copy_id={asset.id}")
     assert empty_fragments_response.status_code == 200
     assert empty_fragments_response.json()["total"] == 0
 
@@ -552,7 +629,7 @@ def test_backfill_extracts_fragments_for_existing_approved_assets(monkeypatch) -
     assert backfill_payload["created_count"] == 1
     assert backfill_payload["failed_count"] == 0
 
-    fragments_response = client.get(f"/api/knowledge/fragments?source_copy_id={asset_id}")
+    fragments_response = client.get(f"/api/knowledge/fragments?source_copy_id={asset.id}")
     assert fragments_response.status_code == 200
     assert fragments_response.json()["total"] == 1
 

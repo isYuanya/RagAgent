@@ -8,7 +8,7 @@ from app.services.copy_assets import (
     parse_copy_import_row,
     read_copy_import_csv,
 )
-from app.services.knowledge_sync import sync_asset_analysis_to_knowledge
+from app.services.copy_postprocess import sync_imported_asset_to_knowledge
 from app.workers.tasks import (
     create_task,
     set_task_failed,
@@ -111,7 +111,7 @@ def run_copy_import_task(
             )
             _publish(set_task_progress(task.task_id, progress))
             asset = create_copy_asset(parsed, analysis, collection_ids=collection_ids or [])
-            sync_asset_analysis_to_knowledge(asset)
+            sync_imported_asset_to_knowledge(asset)
             assets.append(asset)
             progress = _row_done(progress, total_rows, offset, len(assets), len(errors), errors)
             _publish(set_task_progress(task.task_id, progress))
@@ -202,7 +202,7 @@ def run_text_import_task(
         )
         _publish(set_task_progress(task.task_id, progress))
         asset = create_copy_asset(payload, analysis, collection_ids=collection_ids or [])
-        sync_asset_analysis_to_knowledge(asset)
+        sync_imported_asset_to_knowledge(asset)
     except RuntimeError as exc:
         failed_progress = progress.model_copy(
             update={

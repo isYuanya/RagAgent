@@ -302,6 +302,11 @@ Template, tag, case, and block responses keep source traceability:
 Frontend should render `source.source_display` when present. Keep `source.source_id`
 for detail navigation and API calls.
 
+If the imported copy asset is auto-approved by LLM confidence, backend also triggers
+function-level fragment extraction immediately. If the asset stays `pending_review`,
+fragments are created later when the asset is approved or when the manual extraction
+endpoint is called.
+
 ### CopyAsset Delete
 
 用于 `DELETE /api/copy/assets/{asset_id}`。
