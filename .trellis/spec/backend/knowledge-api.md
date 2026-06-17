@@ -290,3 +290,107 @@ return {
 ```
 
 The worker is a first-class required dependency because queued imports need a running consumer.
+
+## Scenario: Draft Workspace
+
+### 1. Scope / Trigger
+
+- Trigger: backend work that changes the Phase 3 manual drafting workspace, draft persistence, draft items, or draft versions.
+- Applies to `/api/drafts/*`, the `drafts`, `draft_items`, and `draft_versions` tables, and services that copy fragment data into draft items.
+- Drafts are backend-owned persistence objects. Frontend renders the workspace but should use backend responses as the source of truth after each write.
+
+### 2. Signatures
+
+```text
+GET    /api/drafts?page=1&page_size=20&status=draft
+POST   /api/drafts
+GET    /api/drafts/{draft_id}
+PATCH  /api/drafts/{draft_id}
+DELETE /api/drafts/{draft_id}
+
+POST   /api/drafts/{draft_id}/items
+PATCH  /api/drafts/{draft_id}/items/reorder
+PATCH  /api/drafts/{draft_id}/items/{item_id}
+DELETE /api/drafts/{draft_id}/items/{item_id}
+
+POST   /api/drafts/{draft_id}/versions
+GET    /api/drafts/{draft_id}/versions
+GET    /api/drafts/{draft_id}/versions/{version_id}
+```
+
+Database tables:
+
+```text
+drafts
+draft_items
+draft_versions
+```
+
+### 3. Contracts
+
+- Draft status is one of `draft`, `ready`, or `archived`.
+- New drafts default to `draft` and start empty.
+- `DELETE /api/drafts/{draft_id}` archives the draft by setting `status = archived`; it must not hard-delete versions.
+- Draft item deletion hard-deletes the item from the current draft only.
+- Saved versions are immutable snapshots of `current_text` and ordered item data.
+- `current_text` is assembled from ordered `draft_items.edited_text` joined with blank lines.
+- Adding an item accepts either `source_fragment_id` or `edited_text`.
+- When `source_fragment_id` is provided, backend copies fragment text, role, position, and source copy id into first-class draft item fields.
+- Frontend should use returned `DraftDetail` after every write to refresh local state.
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior |
+| --- | --- |
+| Invalid request shape | FastAPI/Pydantic `422` |
+| Missing draft | `404` |
+| Missing draft item | `404` |
+| Missing source fragment | `404` |
+| Delete draft | `204`, draft status becomes `archived` |
+| Delete draft item | `204`, current draft no longer includes that item |
+| Database unavailable in tests/local fallback | Service falls back to in-memory store where implemented |
+
+### 5. Good/Base/Bad Cases
+
+- Good: create an empty draft, add selected fragments one by one, edit item text, reorder items, then save a version snapshot.
+- Good: a saved version remains readable after one current draft item is deleted.
+- Base: manually typed draft item can be added with `edited_text` and no source fragment.
+- Bad: do not expose raw UUIDs as the only user-visible content. Use `edited_text`, `original_fragment_text`, or source copy display fields where available.
+- Bad: do not treat archived drafts as deleted data; they are hidden from the default list but still retrievable.
+
+### 6. Tests Required
+
+- API test for draft creation/list/detail/update/archive.
+- API test for adding a fragment-backed item and preserving copied source fields.
+- API test for item edit, reorder, and delete.
+- API test for manual version save/list/detail and immutable snapshots after current item deletion.
+- Static check: `python -m ruff check app tests alembic`.
+- Full backend regression: `python -m pytest`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```text
+DELETE /api/drafts/{draft_id} hard-deletes draft_versions.
+```
+
+#### Correct
+
+```text
+DELETE /api/drafts/{draft_id} sets status = archived and preserves version history.
+```
+
+#### Wrong
+
+```json
+{"metadata": {"source_fragment_id": "<id>"}, "edited_text": "..."}
+```
+
+#### Correct
+
+```json
+{"source_fragment_id": "<id>", "original_fragment_text": "...", "edited_text": "..."}
+```
+
+Draft provenance must stay in first-class fields so later AI diagnosis, recommendation, and source display can use it reliably.

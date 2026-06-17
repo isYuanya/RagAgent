@@ -1,0 +1,148 @@
+from fastapi.testclient import TestClient
+
+from app.main import app
+from app.services.copy_assets import reset_copy_asset_store
+from app.services.drafts import reset_draft_store
+from app.services.knowledge import reset_knowledge_store
+
+
+client = TestClient(app)
+
+
+def setup_function() -> None:
+    reset_copy_asset_store()
+    reset_knowledge_store()
+    reset_draft_store()
+
+
+def _create_fragment(text: str, role: str, order: int = 0) -> dict:
+    raw_response = client.post(
+        "/api/knowledge/raw-copies",
+        json={"source_text": f"{text} source"},
+    )
+    assert raw_response.status_code == 200
+    raw_id = raw_response.json()["id"]
+
+    fragment_response = client.post(
+        "/api/knowledge/fragments",
+        json={
+            "source_copy_id": raw_id,
+            "sequence_order": order,
+            "fragment_text": text,
+            "fragment_role": role,
+            "position": "opening" if order == 0 else "body",
+            "industry": "beauty",
+            "platform": "xhs",
+            "purpose": "conversion",
+            "audience": "new users",
+            "source_quality": "high",
+            "risk_level": "low",
+            "status": "approved",
+            "confidence": 0.9,
+        },
+    )
+    assert fragment_response.status_code == 200
+    return fragment_response.json()
+
+
+def test_draft_workspace_flow_with_version_snapshot() -> None:
+    hook_fragment = _create_fragment("Start with the pain", "hook", 0)
+    proof_fragment = _create_fragment("Show one concrete proof", "proof", 1)
+
+    create_response = client.post(
+        "/api/drafts",
+        json={
+            "title": "Beauty launch draft",
+            "goal": "Build a reviewable launch copy",
+            "audience": "new users",
+            "platform": "xhs",
+            "purpose": "conversion",
+        },
+    )
+    assert create_response.status_code == 200
+    draft = create_response.json()
+    draft_id = draft["id"]
+    assert draft["status"] == "draft"
+    assert draft["current_text"] == ""
+    assert draft["items"] == []
+
+    add_hook_response = client.post(
+        f"/api/drafts/{draft_id}/items",
+        json={"source_fragment_id": hook_fragment["id"]},
+    )
+    assert add_hook_response.status_code == 200
+    draft = add_hook_response.json()
+    hook_item = draft["items"][0]
+    assert hook_item["edited_text"] == "Start with the pain"
+    assert hook_item["original_fragment_text"] == "Start with the pain"
+    assert hook_item["role"] == "hook"
+    assert hook_item["source_copy_id"] == hook_fragment["source_copy_id"]
+
+    add_proof_response = client.post(
+        f"/api/drafts/{draft_id}/items",
+        json={"source_fragment_id": proof_fragment["id"]},
+    )
+    assert add_proof_response.status_code == 200
+    proof_item = add_proof_response.json()["items"][1]
+
+    update_response = client.patch(
+        f"/api/drafts/{draft_id}/items/{hook_item['id']}",
+        json={"edited_text": "If skincare feels useless, check the order first"},
+    )
+    assert update_response.status_code == 200
+    assert update_response.json()["current_text"].startswith("If skincare feels useless")
+
+    reorder_response = client.patch(
+        f"/api/drafts/{draft_id}/items/reorder",
+        json={
+            "items": [
+                {"item_id": hook_item["id"], "order_index": 1},
+                {"item_id": proof_item["id"], "order_index": 0},
+            ]
+        },
+    )
+    assert reorder_response.status_code == 200
+    assert reorder_response.json()["current_text"].startswith("Show one concrete proof")
+
+    version_response = client.post(
+        f"/api/drafts/{draft_id}/versions",
+        json={"label": "first reviewable version"},
+    )
+    assert version_response.status_code == 200
+    version = version_response.json()
+    assert version["version_number"] == 1
+    assert version["item_count"] == 2
+
+    delete_item_response = client.delete(f"/api/drafts/{draft_id}/items/{proof_item['id']}")
+    assert delete_item_response.status_code == 204
+    current_response = client.get(f"/api/drafts/{draft_id}")
+    assert current_response.status_code == 200
+    assert current_response.json()["item_count"] == 1
+
+    version_detail_response = client.get(f"/api/drafts/{draft_id}/versions/{version['id']}")
+    assert version_detail_response.status_code == 200
+    assert version_detail_response.json()["item_count"] == 2
+    assert version_detail_response.json()["items"][0]["edited_text"] == "Show one concrete proof"
+
+    archive_response = client.delete(f"/api/drafts/{draft_id}")
+    assert archive_response.status_code == 204
+    assert client.get("/api/drafts").json()["total"] == 0
+    archived_response = client.get("/api/drafts?status=archived")
+    assert archived_response.status_code == 200
+    assert archived_response.json()["total"] == 1
+
+
+def test_draft_item_requires_source_fragment_or_text() -> None:
+    create_response = client.post("/api/drafts", json={"title": "Manual draft"})
+    assert create_response.status_code == 200
+    draft_id = create_response.json()["id"]
+
+    invalid_response = client.post(f"/api/drafts/{draft_id}/items", json={})
+    assert invalid_response.status_code == 422
+
+    manual_response = client.post(
+        f"/api/drafts/{draft_id}/items",
+        json={"edited_text": "Manual sentence"},
+    )
+    assert manual_response.status_code == 200
+    assert manual_response.json()["current_text"] == "Manual sentence"
