@@ -204,3 +204,36 @@ Implemented asynchronous next-sentence recommendation APIs, accepted recommendat
 ### Next Steps
 
 - None - task complete
+
+
+## Session 7: 智能组稿助手工作流
+
+**Date**: 2026-06-17
+**Task**: 智能组稿助手工作流
+**Branch**: `master`
+
+### Summary
+
+实现 /api/assistant 智能组稿工作流、持久化运行历史、前端独立入口、接口文档和测试。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `43d59b2` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
