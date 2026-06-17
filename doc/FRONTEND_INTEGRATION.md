@@ -294,9 +294,6 @@ CSV 表头要求：
 | 原始文案库 | `/api/knowledge/raw-copies` | 保存原文、来源、作者、指标、所属集合 |
 | 结构化拆解库 | `/api/knowledge/analyses` | 保存自动拆解和人工审核结果 |
 | 模板库 | `/api/knowledge/templates` | 人工维护句式、框架、适用场景 |
-| 标签库 | `/api/knowledge/tags` | 人工维护行业、情绪、目的、人群、钩子类型 |
-| 案例库 | `/api/knowledge/cases` | 人工维护高表现案例及原因 |
-| 禁用库 | `/api/knowledge/blocks` | 人工维护敏感词、违规表达、不要复刻内容 |
 
 每个端点都支持标准 CRUD：
 
@@ -372,7 +369,7 @@ CSV 导入成功后，文案也会出现在原始文案库和结构化拆解库�
 
 ### 来源追溯字段
 
-模板、标签、案例、禁用项都支持可选 `source`：
+模板支持可选 `source`：
 
 ```json
 {
@@ -403,57 +400,6 @@ CSV 导入成功后，文案也会出现在原始文案库和结构化拆解库�
   "metadata": {}
 }
 ```
-
-### 标签库示例
-
-```json
-{
-  "name": "共鸣",
-  "category": "emotion",
-  "description": "用于标记情绪共鸣型表达",
-  "source": {
-    "source_type": "raw_copy",
-    "source_id": "raw-copy-id"
-  },
-  "metadata": {}
-}
-```
-
-`category` 可选：`industry`、`emotion`、`purpose`、`audience`、`hook_type`、`custom`。
-
-### 案例库示例
-
-```json
-{
-  "title": "高收藏护肤案例",
-  "reason": "开头直接命中使用误区。",
-  "performance_summary": "收藏率高，评论集中在求步骤。",
-  "source": {
-    "source_type": "raw_copy",
-    "source_id": "raw-copy-id"
-  },
-  "metadata": {}
-}
-```
-
-### 禁用库示例
-
-```json
-{
-  "content": "百分百有效",
-  "block_type": "violation",
-  "reason": "绝对化承诺",
-  "severity": "high",
-  "source": {
-    "source_type": "raw_copy",
-    "source_id": "raw-copy-id"
-  },
-  "metadata": {}
-}
-```
-
-`block_type` 可选：`sensitive_word`、`violation`、`do_not_copy`、`custom`。  
-`severity` 可选：`low`、`medium`、`high`。
 
 ## 8. 片段级拆解库
 
@@ -570,18 +516,11 @@ After CSV or plain-text import finishes, backend derives knowledge items from th
 LLM analysis automatically.
 
 - Template library: `reusable_template`, `structure`, and `suitable_scenarios`.
-- Tag library: source `industry`, `purpose`, `audience`, analysis `target_user`,
-  `emotion_buttons`, `hook`, and `expression_skills`.
-- Block library: `risk_warnings`.
-- Case library: positive performance `metrics`.
 
 Frontend can refresh these endpoints after import completion:
 
 ```text
 GET /api/knowledge/templates
-GET /api/knowledge/tags
-GET /api/knowledge/blocks
-GET /api/knowledge/cases
 ```
 
 If the imported copy asset is auto-approved by LLM confidence, backend also triggers
@@ -632,3 +571,25 @@ DELETE /api/copy/assets/{asset_id}
 - 只在待审核列表中展示删除按钮。
 - 删除成功后从当前列表中移除该项，或刷新 `/api/copy/assets?status=pending_review`。
 - 如果收到 `409`，提示用户该文案状态已变化，需要刷新列表。
+
+## 12. Phase 5 AI 自动组稿
+
+Draft workspace exposes the auto-composition flow through `/api/compositions`.
+
+Frontend flow:
+
+1. Submit structured brief to `POST /api/compositions/auto-draft`.
+2. Poll `GET /api/tasks/{task_id}` until `status` is `finished` or `failed`.
+3. Parse `task.result` as `AutoCompositionResult`.
+4. Render exactly three candidates, each with five items.
+5. Submit the selected candidate to `POST /api/compositions/accepted`.
+6. Replace/open the returned `draft` from `AcceptCompositionResponse`.
+
+Important display rules:
+
+- Use `reference_fragments` for source text display; do not show raw fragment IDs as the primary source information.
+- If `fallback_reason === "no_matching_fragments"`, show that generation used the brief only.
+- `quote_mode = direct` means backend allowed direct source sentence reuse and provenance is retained after acceptance.
+- Accepted candidates become normal drafts. Unaccepted candidates remain only in the task result.
+
+Request and response examples are documented in `doc/COMPOSITION_API.md`.

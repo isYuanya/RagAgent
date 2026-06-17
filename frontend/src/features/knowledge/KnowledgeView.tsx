@@ -14,9 +14,6 @@ type KbTab =
   | "raw-copies"
   | "analyses"
   | "templates"
-  | "tags"
-  | "cases"
-  | "blocks"
   | "fragments";
 
 const TABS: Array<{ key: KbTab; label: string }> = [
@@ -24,9 +21,6 @@ const TABS: Array<{ key: KbTab; label: string }> = [
   { key: "raw-copies", label: "原始文案库" },
   { key: "analyses", label: "结构化拆解库" },
   { key: "templates", label: "模板库" },
-  { key: "tags", label: "标签库" },
-  { key: "cases", label: "案例库" },
-  { key: "blocks", label: "禁用库" },
   { key: "fragments", label: "片段库" }
 ];
 

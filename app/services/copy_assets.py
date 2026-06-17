@@ -138,7 +138,7 @@ def get_copy_asset(asset_id: str) -> CopyAssetSummary | None:
     return _copy_assets.get(asset_id)
 
 
-def delete_copy_asset(asset_id: str) -> Literal["deleted", "not_found", "conflict"]:
+def delete_copy_asset(asset_id: str) -> Literal["deleted", "not_found", "conflict", "unavailable"]:
     db_result = _delete_db_asset(asset_id)
     if db_result == "deleted":
         _delete_redis_asset(asset_id)
@@ -149,6 +149,8 @@ def delete_copy_asset(asset_id: str) -> Literal["deleted", "not_found", "conflic
 
     redis_asset = _get_redis_asset(asset_id)
     if redis_asset is not None:
+        if _asset_requires_db_delete(redis_asset):
+            return "unavailable"
         if redis_asset.status != "pending_review":
             return "conflict"
         _delete_redis_asset(asset_id)
@@ -158,6 +160,8 @@ def delete_copy_asset(asset_id: str) -> Literal["deleted", "not_found", "conflic
     asset = _copy_assets.get(asset_id)
     if asset is None:
         return "not_found"
+    if _asset_requires_db_delete(asset):
+        return "unavailable"
     if asset.status != "pending_review":
         return "conflict"
     _copy_assets.pop(asset_id, None)
@@ -654,6 +658,10 @@ def _delete_redis_asset(asset_id: str) -> None:
 
 def _is_deleted_metadata(metadata: dict) -> bool:
     return metadata.get("deleted") is True
+
+
+def _asset_requires_db_delete(asset: CopyAssetSummary) -> bool:
+    return asset.storage_backend == "postgres"
 
 
 def _blank_to_none(value: str | None) -> str | None:

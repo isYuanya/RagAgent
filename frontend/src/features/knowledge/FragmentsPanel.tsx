@@ -29,7 +29,7 @@ import {
   fetchFragments,
   updateFragment
 } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { cn, formatPositionLabel, formatRoleLabel } from "@/lib/utils";
 import { StatusBadge, STATUS_LABELS } from "@/features/StatusBadge";
 import type {
   FragmentFilters,
@@ -343,7 +343,8 @@ export function FragmentsPanel({ sourceCopyId }: { sourceCopyId?: string }) {
                   </div>
                 </div>
                 <div className="mt-1 line-clamp-1 text-xs text-muted-foreground">
-                  {item.fragment_role} · {item.position} · 顺序{" "}
+                  {formatRoleLabel(item.fragment_role)} ·{" "}
+                  {formatPositionLabel(item.position)} · 顺序{" "}
                   {item.sequence_order} · 置信度{" "}
                   {formatConfidence(item.confidence)}
                 </div>
@@ -483,8 +484,12 @@ function FragmentDetail({
           <DetailBlock label="置信度">
             {formatConfidence(fragment.confidence)}
           </DetailBlock>
-          <DetailBlock label="片段角色">{fragment.fragment_role}</DetailBlock>
-          <DetailBlock label="位置">{fragment.position}</DetailBlock>
+          <DetailBlock label="片段角色">
+            {formatRoleLabel(fragment.fragment_role)}
+          </DetailBlock>
+          <DetailBlock label="位置">
+            {formatPositionLabel(fragment.position)}
+          </DetailBlock>
           <DetailBlock label="顺序">{fragment.sequence_order}</DetailBlock>
           <DetailBlock label="行业">{fragment.industry || "未标行业"}</DetailBlock>
           <DetailBlock label="平台">{fragment.platform || "未标平台"}</DetailBlock>
@@ -626,14 +631,14 @@ function FragmentDialog({
               label="片段角色"
               value={draft.fragment_role}
               onChange={(value) => update("fragment_role", value)}
-              placeholder="hook / pain_point / proof / cta"
+              placeholder="开头钩子 / 痛点 / 证明背书 / 行动引导"
             />
             <TextField
               id="fragment-position"
               label="位置"
               value={draft.position}
               onChange={(value) => update("position", value)}
-              placeholder="opening / middle / ending"
+              placeholder="开头 / 中段 / 结尾"
             />
             <TextField
               id="fragment-industry"

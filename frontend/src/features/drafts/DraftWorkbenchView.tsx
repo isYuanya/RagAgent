@@ -30,9 +30,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDialog } from "@/features/shared/ConfirmDialog";
 import { EmptyState } from "@/features/shared/EmptyState";
 import {
+  acceptComposition,
   acceptRecommendation,
   addDraftItem,
   archiveDraft,
+  createAutoComposition,
   createDraft,
   createDraftVersion,
   createNextSentenceRecommendation,
@@ -46,8 +48,16 @@ import {
   updateDraft,
   updateDraftItem
 } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import {
+  cn,
+  formatPositionLabel,
+  formatQuoteModeLabel,
+  formatRoleLabel
+} from "@/lib/utils";
 import type {
+  AutoCompositionBrief,
+  AutoCompositionResult,
+  CompositionCandidate,
   DraftDetail,
   DraftItem,
   DraftStatus,
@@ -326,6 +336,11 @@ export function DraftWorkbenchView({
               onVersionLabelChange={setVersionLabel}
               onSaveVersion={handleSaveVersion}
               onDetailChange={handleDetailChange}
+              onCompositionAccepted={(nextDraft) => {
+                applyDetail(nextDraft);
+                setDraftForm(draftToForm(nextDraft));
+                void loadDrafts(nextDraft.id);
+              }}
             />
           ) : (
             <div className="flex h-full items-center justify-center p-6 text-sm text-muted-foreground">
@@ -448,6 +463,8 @@ function DraftEditor({
   onSaveDraft: () => void;
   onDetailChange: (draft: DraftDetail) => void;
 }) {
+  const [previewExpanded, setPreviewExpanded] = React.useState(false);
+
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-border px-5 py-4">
@@ -500,6 +517,32 @@ function DraftEditor({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
+        <section className="sticky top-0 z-10 mb-4 rounded-lg border border-border bg-card p-3 shadow-sm">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <div className="text-xs font-medium text-muted-foreground">
+            全文预览
+          </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-xs"
+              onClick={() => setPreviewExpanded((current) => !current)}
+            >
+              {previewExpanded ? <ChevronUp /> : <ChevronDown />}
+              {previewExpanded ? "收起" : "展开"}
+            </Button>
+          </div>
+          <div
+            className={cn(
+              "overflow-y-auto whitespace-pre-wrap rounded-md bg-muted/30 p-3 text-sm leading-7",
+              previewExpanded ? "max-h-[420px]" : "max-h-36"
+            )}
+          >
+            {draft.current_text || "暂无正文"}
+          </div>
+        </section>
+
         <div className="mb-3 flex items-center justify-between gap-3">
           <div className="text-sm font-semibold">段落编排（{draft.item_count}）</div>
           <ManualItemForm draft={draft} onDetailChange={onDetailChange} />
@@ -524,15 +567,6 @@ function DraftEditor({
             ))}
           </div>
         )}
-
-        <section className="mt-5">
-          <div className="mb-2 text-xs font-medium text-muted-foreground">
-            全文预览
-          </div>
-          <div className="whitespace-pre-wrap rounded-lg border border-border bg-muted/30 p-4 text-sm leading-7">
-            {draft.current_text || "暂无正文"}
-          </div>
-        </section>
       </div>
     </div>
   );
@@ -598,12 +632,12 @@ function ManualItemForm({
         <Input
           value={role}
           onChange={(event) => setRole(event.target.value)}
-          placeholder="角色，例如 hook"
+          placeholder="角色，例如 开头钩子（hook）"
         />
         <Input
           value={position}
           onChange={(event) => setPosition(event.target.value)}
-          placeholder="位置，例如 opening"
+          placeholder="位置，例如 开头（opening）"
         />
       </div>
       <div className="mt-2 flex justify-end gap-2">
@@ -756,12 +790,14 @@ function DraftItemCard({
           value={role}
           options={ROLE_OPTIONS}
           placeholder="角色"
+          formatOption={formatRoleLabel}
           onChange={setRole}
         />
         <ComboInput
           value={position}
           options={POSITION_OPTIONS}
           placeholder="位置"
+          formatOption={formatPositionLabel}
           onChange={setPosition}
         />
         <Button onClick={handleSave} disabled={saving}>
@@ -789,7 +825,8 @@ function DraftSidePanel({
   versionBusy,
   onVersionLabelChange,
   onSaveVersion,
-  onDetailChange
+  onDetailChange,
+  onCompositionAccepted
 }: {
   draft: DraftDetail;
   versions: DraftVersionSummary[];
@@ -798,9 +835,14 @@ function DraftSidePanel({
   onVersionLabelChange: (value: string) => void;
   onSaveVersion: () => void;
   onDetailChange: (draft: DraftDetail) => void;
+  onCompositionAccepted: (draft: DraftDetail) => void;
 }) {
   return (
     <div className="flex h-full flex-col">
+      <AutoCompositionPanel
+        draft={draft}
+        onCompositionAccepted={onCompositionAccepted}
+      />
       <RecommendationPanel draft={draft} onDetailChange={onDetailChange} />
       <FragmentPicker draft={draft} onDetailChange={onDetailChange} />
       <div className="min-h-[220px] border-t border-border p-4">
@@ -850,6 +892,284 @@ function DraftSidePanel({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function AutoCompositionPanel({
+  draft,
+  onCompositionAccepted
+}: {
+  draft: DraftDetail;
+  onCompositionAccepted: (draft: DraftDetail) => void;
+}) {
+  const [product, setProduct] = React.useState(draft.goal ?? draft.title);
+  const [audience, setAudience] = React.useState(draft.audience ?? "");
+  const [platform, setPlatform] = React.useState(draft.platform ?? "");
+  const [purpose, setPurpose] = React.useState(draft.purpose ?? "");
+  const [style, setStyle] = React.useState("实用、清晰、可信");
+  const [sellingPoints, setSellingPoints] = React.useState("");
+  const [constraints, setConstraints] = React.useState("");
+  const [targetLength, setTargetLength] = React.useState("");
+  const [task, setTask] = React.useState<TaskResponse | null>(null);
+  const [result, setResult] = React.useState<AutoCompositionResult | null>(null);
+  const [creating, setCreating] = React.useState(false);
+  const [acceptingId, setAcceptingId] = React.useState<string | null>(null);
+
+  const isRunning = task ? ["queued", "running"].includes(task.status) : false;
+
+  React.useEffect(() => {
+    setProduct(draft.goal ?? draft.title);
+    setAudience(draft.audience ?? "");
+    setPlatform(draft.platform ?? "");
+    setPurpose(draft.purpose ?? "");
+    setTask(null);
+    setResult(null);
+  }, [draft.id, draft.goal, draft.title, draft.audience, draft.platform, draft.purpose]);
+
+  React.useEffect(() => {
+    if (!task || !["queued", "running"].includes(task.status)) return;
+    const timer = window.setInterval(async () => {
+      const next = await fetchTask(task.task_id);
+      if (!next) return;
+      setTask(next);
+      if (next.status === "finished") {
+        const parsed = parseAutoCompositionResult(next);
+        setResult(parsed);
+        if (parsed) toast.success("自动组稿已生成");
+      }
+      if (next.status === "failed") {
+        toast.error(next.error ?? "自动组稿失败");
+      }
+    }, 1200);
+    return () => window.clearInterval(timer);
+  }, [task?.task_id, task?.status]);
+
+  function buildBrief(): AutoCompositionBrief | null {
+    const keySellingPoints = sellingPoints
+      .split(/[\n,，]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (
+      !product.trim() ||
+      !audience.trim() ||
+      !platform.trim() ||
+      !purpose.trim() ||
+      !style.trim() ||
+      keySellingPoints.length === 0
+    ) {
+      toast.error("请补齐产品、人群、平台、目的、风格和卖点");
+      return null;
+    }
+    return {
+      product: product.trim(),
+      audience: audience.trim(),
+      platform: platform.trim(),
+      purpose: purpose.trim(),
+      style: style.trim(),
+      key_selling_points: keySellingPoints,
+      constraints: constraints.trim() || null,
+      target_length: targetLength.trim() || null,
+      metadata: { source_draft_id: draft.id }
+    };
+  }
+
+  async function handleCreate() {
+    const brief = buildBrief();
+    if (!brief) return;
+    setCreating(true);
+    setResult(null);
+    try {
+      const payload = await createAutoComposition({ brief });
+      setTask(payload);
+      const parsed = parseAutoCompositionResult(payload);
+      if (payload.status === "finished" && parsed) {
+        setResult(parsed);
+        toast.success("自动组稿已生成");
+      } else {
+        toast.message(payload.progress?.current_message ?? "自动组稿任务已创建");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "创建自动组稿任务失败");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleAccept(candidate: CompositionCandidate) {
+    if (!task) return;
+    setAcceptingId(candidate.candidate_id);
+    try {
+      const response = await acceptComposition({
+        task_id: task.task_id,
+        candidate_id: candidate.candidate_id,
+        metadata: { accepted_from_draft_id: draft.id }
+      });
+      onCompositionAccepted(response.draft);
+      toast.success("自动组稿已生成新草稿");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "采纳自动组稿失败");
+    } finally {
+      setAcceptingId(null);
+    }
+  }
+
+  return (
+    <div className="border-b border-border p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="text-sm font-semibold">AI 自动组稿</div>
+        <Button
+          size="sm"
+          onClick={handleCreate}
+          disabled={creating || isRunning || draft.status === "archived"}
+        >
+          {creating || isRunning ? (
+            <Loader2 className="animate-spin" />
+          ) : (
+            <Sparkles />
+          )}
+          生成
+        </Button>
+      </div>
+      <div className="space-y-2">
+        <Input
+          value={product}
+          onChange={(event) => setProduct(event.target.value)}
+          placeholder="产品 / 主题"
+        />
+        <div className="grid grid-cols-2 gap-2">
+          <Input
+            value={platform}
+            onChange={(event) => setPlatform(event.target.value)}
+            placeholder="平台"
+          />
+          <Input
+            value={purpose}
+            onChange={(event) => setPurpose(event.target.value)}
+            placeholder="目的"
+          />
+        </div>
+        <Input
+          value={audience}
+          onChange={(event) => setAudience(event.target.value)}
+          placeholder="目标人群"
+        />
+        <Input
+          value={style}
+          onChange={(event) => setStyle(event.target.value)}
+          placeholder="表达风格"
+        />
+        <Textarea
+          value={sellingPoints}
+          onChange={(event) => setSellingPoints(event.target.value)}
+          className="min-h-[72px]"
+          placeholder="核心卖点；可用换行或逗号分隔"
+        />
+        <div className="grid grid-cols-2 gap-2">
+          <Input
+            value={targetLength}
+            onChange={(event) => setTargetLength(event.target.value)}
+            placeholder="目标长度，可选"
+          />
+          <Input
+            value={constraints}
+            onChange={(event) => setConstraints(event.target.value)}
+            placeholder="约束，可选"
+          />
+        </div>
+      </div>
+      {task?.progress ? (
+        <div className="mt-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+          {task.progress.current_message ?? task.progress.phase}
+          {task.progress.model ? ` · ${task.progress.model}` : ""}
+        </div>
+      ) : null}
+      {result ? (
+        <div className="mt-3 space-y-3">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <Badge variant="outline">{result.candidates.length} 个候选</Badge>
+            {result.fallback_reason ? (
+              <Badge variant="muted">未命中片段，已兜底生成</Badge>
+            ) : (
+              <Badge variant="outline">
+                参考 {result.reference_fragments.length} 个片段
+              </Badge>
+            )}
+            {result.model ? <span>{result.model}</span> : null}
+          </div>
+          <div className="max-h-[460px] space-y-2 overflow-y-auto pr-1">
+            {result.candidates.map((candidate) => (
+              <CompositionCandidateCard
+                key={candidate.candidate_id}
+                candidate={candidate}
+                references={result.reference_fragments}
+                accepting={acceptingId === candidate.candidate_id}
+                onAccept={() => handleAccept(candidate)}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function CompositionCandidateCard({
+  candidate,
+  references,
+  accepting,
+  onAccept
+}: {
+  candidate: CompositionCandidate;
+  references: ReferenceFragmentSummary[];
+  accepting: boolean;
+  onAccept: () => void;
+}) {
+  const referenceLookup = new Map(references.map((item) => [item.id, item]));
+  return (
+    <div className="rounded-lg border border-border bg-background p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-medium">{candidate.title}</div>
+          {candidate.strategy ? (
+            <div className="mt-1 text-xs leading-5 text-muted-foreground">
+              {candidate.strategy}
+            </div>
+          ) : null}
+        </div>
+        <Badge variant="outline">{candidate.items.length} 段</Badge>
+      </div>
+      <div className="mt-3 space-y-2">
+        {candidate.items.map((item, index) => (
+          <div key={`${item.role}-${index}`} className="rounded-md bg-muted/30 p-2">
+            <div className="mb-1 flex flex-wrap gap-1 text-xs text-muted-foreground">
+              <span>
+                {index + 1}. {formatRoleLabel(item.role)}
+              </span>
+              <span>· {formatPositionLabel(item.position)}</span>
+              <span>· {formatQuoteModeLabel(item.quote_mode)}</span>
+            </div>
+            <div className="whitespace-pre-wrap text-sm leading-6">{item.text}</div>
+            {item.reference_fragment_ids.length > 0 ? (
+              <div className="mt-1 text-xs text-muted-foreground">
+                来源：
+                {item.reference_fragment_ids
+                  .map((id) => referenceLookup.get(id)?.text ?? id)
+                  .join(" / ")}
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
+      <Button
+        size="sm"
+        className="mt-3 w-full"
+        onClick={onAccept}
+        disabled={accepting}
+      >
+        {accepting ? <Loader2 className="animate-spin" /> : <Plus />}
+        采纳为新草稿
+      </Button>
     </div>
   );
 }
@@ -986,7 +1306,9 @@ function RecommendationPanel({
       {result ? (
         <div className="mt-3 space-y-3">
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <Badge variant="outline">下一功能：{result.next_function}</Badge>
+            <Badge variant="outline">
+              下一功能：{formatRoleLabel(result.next_function)}
+            </Badge>
             {result.model ? <span>{result.model}</span> : null}
           </div>
           <div className="max-h-[360px] space-y-2 overflow-y-auto pr-1">
@@ -1028,7 +1350,7 @@ function RecommendationCandidateCard({
     <div className="rounded-lg border border-border bg-background p-3">
       <div className="whitespace-pre-wrap text-sm leading-6">{candidate.text}</div>
       <div className="mt-2 flex flex-wrap gap-1 text-xs text-muted-foreground">
-        <span>{candidate.function}</span>
+        <span>{formatRoleLabel(candidate.function)}</span>
         {candidate.tone ? <span>· {candidate.tone}</span> : null}
         <span>· 建议位置 {candidate.suggested_order_index + 1}</span>
       </div>
@@ -1054,7 +1376,11 @@ function RecommendationCandidateCard({
               <div key={item.id} className="rounded-md bg-muted/30 p-2 leading-5">
                 <div className="text-foreground">{item.text}</div>
                 <div className="mt-1">
-                  {[item.role, item.position, item.source_display]
+                  {[
+                    formatRoleLabel(item.role),
+                    formatPositionLabel(item.position),
+                    item.source_display
+                  ]
                     .filter(Boolean)
                     .join(" · ")}
                 </div>
@@ -1142,6 +1468,7 @@ function FragmentPicker({
           value={role}
           options={ROLE_OPTIONS}
           placeholder="按角色过滤"
+          formatOption={formatRoleLabel}
           onChange={setRole}
         />
       </div>
@@ -1166,8 +1493,8 @@ function FragmentPicker({
                 {item.fragment_text}
               </div>
               <div className="mt-2 flex flex-wrap gap-1 text-xs text-muted-foreground">
-                <span>{item.fragment_role}</span>
-                <span>· {item.position}</span>
+                <span>{formatRoleLabel(item.fragment_role)}</span>
+                <span>· {formatPositionLabel(item.position)}</span>
                 {item.platform ? <span>· {item.platform}</span> : null}
               </div>
               <Button
@@ -1259,11 +1586,13 @@ function ComboInput({
   value,
   options,
   placeholder,
+  formatOption,
   onChange
 }: {
   value: string;
   options: string[];
   placeholder: string;
+  formatOption?: (value: string) => string;
   onChange: (value: string) => void;
 }) {
   const id = React.useId();
@@ -1277,7 +1606,7 @@ function ComboInput({
       />
       <datalist id={id}>
         {options.map((option) => (
-          <option key={option} value={option} />
+          <option key={option} value={option} label={formatOption?.(option) ?? option} />
         ))}
       </datalist>
     </>
@@ -1340,6 +1669,24 @@ function parseRecommendationResult(
     next_function: result.next_function,
     model: typeof result.model === "string" ? result.model : null,
     candidates: result.candidates as RecommendationCandidate[],
+    reference_fragments: Array.isArray(result.reference_fragments)
+      ? (result.reference_fragments as ReferenceFragmentSummary[])
+      : []
+  };
+}
+
+function parseAutoCompositionResult(task: TaskResponse): AutoCompositionResult | null {
+  const result = task.result;
+  if (!result || typeof result !== "object") return null;
+  if (!Array.isArray(result.candidates) || !result.brief) {
+    return null;
+  }
+  return {
+    brief: result.brief as AutoCompositionBrief,
+    model: typeof result.model === "string" ? result.model : null,
+    fallback_reason:
+      typeof result.fallback_reason === "string" ? result.fallback_reason : null,
+    candidates: result.candidates as CompositionCandidate[],
     reference_fragments: Array.isArray(result.reference_fragments)
       ? (result.reference_fragments as ReferenceFragmentSummary[])
       : []

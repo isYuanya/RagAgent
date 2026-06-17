@@ -5,12 +5,6 @@ from app.schemas.knowledge import (
     AnalysisListResponse,
     AnalysisSummary,
     AnalysisUpdate,
-    BlockCreate,
-    BlockItem,
-    BlockUpdate,
-    CaseCreate,
-    CaseItem,
-    CaseUpdate,
     FragmentCreate,
     FragmentExtractionBatchResponse,
     FragmentExtractionResult,
@@ -25,9 +19,6 @@ from app.schemas.knowledge import (
     RawCopyListResponse,
     RawCopySummary,
     RawCopyUpdate,
-    TagCreate,
-    TagItem,
-    TagUpdate,
     TemplateCreate,
     TemplateItem,
     TemplateUpdate,
@@ -173,84 +164,6 @@ def update_template(item_id: str, payload: TemplateUpdate):
 def delete_template(item_id: str):
     if not knowledge.delete_template(item_id):
         raise HTTPException(status_code=404, detail="Template not found")
-
-
-@router.get("/tags", response_model=KnowledgeItemListResponse)
-def list_tags(page: int = _page_query(), page_size: int = _page_size_query()):
-    return knowledge.list_tags(page=page, page_size=page_size)
-
-
-@router.post("/tags", response_model=TagItem)
-def create_tag(payload: TagCreate):
-    return knowledge.create_tag(payload)
-
-
-@router.get("/tags/{item_id}", response_model=TagItem)
-def get_tag(item_id: str):
-    return _get_or_404(knowledge.get_tag(item_id), "Tag not found")
-
-
-@router.patch("/tags/{item_id}", response_model=TagItem)
-def update_tag(item_id: str, payload: TagUpdate):
-    return _get_or_404(knowledge.update_tag(item_id, payload), "Tag not found")
-
-
-@router.delete("/tags/{item_id}", status_code=204)
-def delete_tag(item_id: str):
-    if not knowledge.delete_tag(item_id):
-        raise HTTPException(status_code=404, detail="Tag not found")
-
-
-@router.get("/cases", response_model=KnowledgeItemListResponse)
-def list_cases(page: int = _page_query(), page_size: int = _page_size_query()):
-    return knowledge.list_cases(page=page, page_size=page_size)
-
-
-@router.post("/cases", response_model=CaseItem)
-def create_case(payload: CaseCreate):
-    return knowledge.create_case(payload)
-
-
-@router.get("/cases/{item_id}", response_model=CaseItem)
-def get_case(item_id: str):
-    return _get_or_404(knowledge.get_case(item_id), "Case not found")
-
-
-@router.patch("/cases/{item_id}", response_model=CaseItem)
-def update_case(item_id: str, payload: CaseUpdate):
-    return _get_or_404(knowledge.update_case(item_id, payload), "Case not found")
-
-
-@router.delete("/cases/{item_id}", status_code=204)
-def delete_case(item_id: str):
-    if not knowledge.delete_case(item_id):
-        raise HTTPException(status_code=404, detail="Case not found")
-
-
-@router.get("/blocks", response_model=KnowledgeItemListResponse)
-def list_blocks(page: int = _page_query(), page_size: int = _page_size_query()):
-    return knowledge.list_blocks(page=page, page_size=page_size)
-
-
-@router.post("/blocks", response_model=BlockItem)
-def create_block(payload: BlockCreate):
-    return knowledge.create_block(payload)
-
-
-@router.get("/blocks/{item_id}", response_model=BlockItem)
-def get_block(item_id: str):
-    return _get_or_404(knowledge.get_block(item_id), "Block not found")
-
-
-@router.patch("/blocks/{item_id}", response_model=BlockItem)
-def update_block(item_id: str, payload: BlockUpdate):
-    return _get_or_404(knowledge.update_block(item_id, payload), "Block not found")
-
-
-@router.delete("/blocks/{item_id}", status_code=204)
-def delete_block(item_id: str):
-    if not knowledge.delete_block(item_id):
-        raise HTTPException(status_code=404, detail="Block not found")
 
 
 @router.get("/fragments", response_model=KnowledgeItemListResponse)

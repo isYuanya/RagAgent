@@ -139,56 +139,6 @@ export type KnowledgeTemplate = {
 
 export type KnowledgeTemplateCreate = Omit<KnowledgeTemplate, "id">;
 
-export type TagCategory =
-  | "industry"
-  | "emotion"
-  | "purpose"
-  | "audience"
-  | "hook_type"
-  | "custom";
-
-export type KnowledgeTag = {
-  id: string;
-  name: string;
-  category: TagCategory;
-  description?: string | null;
-  source?: SourceReference | null;
-  metadata: Record<string, unknown>;
-};
-
-export type KnowledgeTagCreate = Omit<KnowledgeTag, "id">;
-
-export type KnowledgeCase = {
-  id: string;
-  title: string;
-  reason: string;
-  performance_summary?: string | null;
-  source?: SourceReference | null;
-  metadata: Record<string, unknown>;
-};
-
-export type KnowledgeCaseCreate = Omit<KnowledgeCase, "id">;
-
-export type BlockType =
-  | "sensitive_word"
-  | "violation"
-  | "do_not_copy"
-  | "custom";
-
-export type BlockSeverity = "low" | "medium" | "high";
-
-export type KnowledgeBlock = {
-  id: string;
-  content: string;
-  block_type: BlockType;
-  reason?: string | null;
-  severity: BlockSeverity;
-  source?: SourceReference | null;
-  metadata: Record<string, unknown>;
-};
-
-export type KnowledgeBlockCreate = Omit<KnowledgeBlock, "id">;
-
 export type FragmentQuality = "unknown" | "low" | "medium" | "high";
 export type FragmentRiskLevel = "low" | "medium" | "high";
 
@@ -392,6 +342,156 @@ export type AcceptedRecommendationItem = {
 export type AcceptRecommendationResponse = {
   accepted: AcceptedRecommendationItem;
   draft: DraftDetail;
+};
+
+export type AutoCompositionBrief = {
+  product: string;
+  audience: string;
+  platform: string;
+  purpose: string;
+  style: string;
+  key_selling_points: string[];
+  constraints?: string | null;
+  target_length?: string | null;
+  metadata?: Record<string, unknown>;
+};
+
+export type AutoCompositionRequest = {
+  brief: AutoCompositionBrief;
+};
+
+export type CompositionItemCandidate = {
+  role: "hook" | "pain_point" | "solution" | "proof" | "cta";
+  position: string;
+  text: string;
+  quote_mode: "direct" | "adapted" | "original";
+  reference_fragment_ids: string[];
+  source_copy_id?: string | null;
+  reason: string;
+};
+
+export type CompositionCandidate = {
+  candidate_id: string;
+  title: string;
+  strategy: string;
+  items: CompositionItemCandidate[];
+  reference_fragment_ids: string[];
+};
+
+export type AutoCompositionResult = {
+  brief: AutoCompositionBrief;
+  model?: string | null;
+  fallback_reason?: string | null;
+  candidates: CompositionCandidate[];
+  reference_fragments: ReferenceFragmentSummary[];
+};
+
+export type AcceptCompositionRequest = {
+  task_id: string;
+  candidate_id: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type AcceptedCompositionItem = {
+  id: string;
+  task_id: string;
+  candidate_id: string;
+  draft_id: string;
+  brief: AutoCompositionBrief;
+  candidate_title: string;
+  model?: string | null;
+  reference_fragment_ids: string[];
+  metadata: Record<string, unknown>;
+};
+
+export type AcceptCompositionResponse = {
+  accepted: AcceptedCompositionItem;
+  draft: DraftDetail;
+};
+
+export type DiagnosticLevel = "weak" | "fair" | "strong" | "risk" | "high_risk";
+export type RewriteMode = "conservative" | "conversion" | "compliance_safe";
+
+export type DiagnosticSource = {
+  source_type: "text" | "draft";
+  text: string;
+  draft_id?: string | null;
+  platform?: string | null;
+  audience?: string | null;
+  purpose?: string | null;
+  style?: string | null;
+  industry?: string | null;
+};
+
+export type DimensionFinding = {
+  dimension: string;
+  level: DiagnosticLevel;
+  reason: string;
+  suggestion: string;
+};
+
+export type SentenceIssue = {
+  text: string;
+  dimension: string;
+  level: DiagnosticLevel;
+  reason: string;
+  suggestion: string;
+  replacement: string;
+};
+
+export type RewriteCandidate = {
+  candidate_id: string;
+  mode: RewriteMode;
+  title: string;
+  text: string;
+  reason: string;
+};
+
+export type CopyDiagnosisRequest = {
+  text?: string | null;
+  draft_id?: string | null;
+  platform?: string | null;
+  audience?: string | null;
+  purpose?: string | null;
+  style?: string | null;
+  industry?: string | null;
+  constraints?: string[];
+  rewrite_modes?: RewriteMode[];
+  metadata?: Record<string, unknown>;
+};
+
+export type CopyDiagnosisResult = {
+  source: DiagnosticSource;
+  summary: string;
+  overall_level: DiagnosticLevel;
+  dimensions: DimensionFinding[];
+  sentence_issues: SentenceIssue[];
+  rewrite_candidates: RewriteCandidate[];
+  risk_warnings: RiskWarning[];
+  model?: string | null;
+};
+
+export type AcceptDiagnosticRewriteRequest = {
+  draft_id: string;
+  task_id: string;
+  candidate_id: string;
+  label?: string | null;
+  metadata?: Record<string, unknown>;
+};
+
+export type AcceptedDiagnosticRewrite = {
+  draft_id: string;
+  task_id: string;
+  candidate_id: string;
+  rewrite_text: string;
+  model?: string | null;
+  metadata: Record<string, unknown>;
+};
+
+export type AcceptDiagnosticRewriteResponse = {
+  accepted: AcceptedDiagnosticRewrite;
+  draft: DraftDetail;
+  version: DraftVersionDetail;
 };
 
 export const emptyAnalysis: Analysis = {

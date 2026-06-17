@@ -4,7 +4,12 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.schemas.copy import CopyAnalysisRequest, CopyAnalysisResponse, CopyAssetSummary
-from app.services.copy_assets import create_copy_asset, list_copy_assets, reset_copy_asset_store
+from app.services.copy_assets import (
+    create_copy_asset,
+    delete_copy_asset,
+    list_copy_assets,
+    reset_copy_asset_store,
+)
 from app.services.knowledge import reset_knowledge_store
 
 
@@ -438,7 +443,7 @@ def test_import_csv_accepts_utf8_bom(monkeypatch) -> None:
     assert list_response.json()["items"][0]["source_text"] == "bom copy"
 
 
-def test_import_syncs_analysis_to_knowledge_libraries(monkeypatch) -> None:
+def test_import_syncs_analysis_to_template_library(monkeypatch) -> None:
     reset_copy_asset_store()
     reset_knowledge_store()
     monkeypatch.setattr("app.services.copy_analysis.get_llm_client", lambda: DerivedKnowledgeLLMClient())
@@ -467,25 +472,6 @@ def test_import_syncs_analysis_to_knowledge_libraries(monkeypatch) -> None:
     assert template["content"] == "If you feel ___, check ___ first."
     assert template["source"]["source_id"] == asset_id
     assert template["source"]["source_display"] == "source copy for derived knowledge"
-
-    tags_response = client.get("/api/knowledge/tags")
-    assert tags_response.status_code == 200
-    tags = tags_response.json()["items"]
-    assert ("beauty", "industry") in {(item["name"], item["category"]) for item in tags}
-    assert ("curiosity", "emotion") in {(item["name"], item["category"]) for item in tags}
-    assert all(item["source"]["source_display"] == "source copy for derived knowledge" for item in tags)
-
-    cases_response = client.get("/api/knowledge/cases")
-    assert cases_response.status_code == 200
-    assert cases_response.json()["total"] == 1
-    assert cases_response.json()["items"][0]["performance_summary"] == "likes: 120"
-
-    blocks_response = client.get("/api/knowledge/blocks")
-    assert blocks_response.status_code == 200
-    block = blocks_response.json()["items"][0]
-    assert block["content"] == "Avoid absolute guaranteed results."
-    assert block["severity"] == "high"
-    assert block["source"]["source_display"] == "source copy for derived knowledge"
 
 
 def test_high_confidence_import_is_auto_approved(monkeypatch) -> None:
@@ -682,6 +668,32 @@ def test_delete_pending_review_copy_asset(monkeypatch) -> None:
     list_response = client.get("/api/copy/assets")
     assert list_response.status_code == 200
     assert all(item["id"] != asset_id for item in list_response.json()["items"])
+
+
+def test_db_backed_copy_asset_delete_does_not_fall_back_to_cache_only(monkeypatch) -> None:
+    reset_copy_asset_store()
+    asset = CopyAssetSummary(
+        id="33333333-3333-3333-3333-333333333333",
+        source_text="db backed cached copy",
+        status="pending_review",
+        storage_backend="postgres",
+    )
+
+    monkeypatch.setattr("app.services.copy_assets._delete_db_asset", lambda asset_id: None)
+    monkeypatch.setattr("app.services.copy_assets._get_redis_asset", lambda asset_id: asset)
+
+    result = delete_copy_asset(asset.id)
+
+    assert result == "unavailable"
+
+
+def test_delete_copy_asset_returns_503_when_db_delete_is_unavailable(monkeypatch) -> None:
+    monkeypatch.setattr("app.api.routes.copy.delete_copy_asset", lambda asset_id: "unavailable")
+
+    response = client.delete("/api/copy/assets/33333333-3333-3333-3333-333333333333")
+
+    assert response.status_code == 503
+    assert "Database is unavailable" in response.json()["detail"]
 
 
 def test_import_requires_configured_llm(monkeypatch) -> None:

@@ -9,6 +9,7 @@ cd C:\RagAgent
 ```
 
 ## 1. 必须启动的服务
+sudo service redis-server start
 
 ### 1.1 后端 API
 

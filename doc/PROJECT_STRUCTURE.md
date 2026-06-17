@@ -50,7 +50,7 @@ frontend/       前端历史实现；默认不再由后端工作修改
 - `GET /api/copy/assets`：分页查询文案资产，支持状态、行业、平台筛选。
 - `GET /api/copy/assets/{asset_id}`：查看单条文案资产详情。
 - `PATCH /api/copy/assets/{asset_id}/review`：提交人工审核后的拆解结果。
-- `/api/knowledge/*`：知识库 API，覆盖集合、原始文案、结构化拆解、模板、标签、案例和禁用库。
+- `/api/knowledge/*`：知识库 API，覆盖集合、原始文案、结构化拆解、模板和片段库。
 - `POST /api/generate`、`POST /api/feedback`：保留现有生成和反馈接口。
 
 ## 本地启动
@@ -119,3 +119,12 @@ python -m compileall app scripts tests
 - `doc/FRONTEND_INTEGRATION.md`
 - `doc/SCHEMAS.md`
 - FastAPI schema 对应的 `app/schemas/*.py`
+
+## Phase 5 AI Auto-Composition
+
+- `POST /api/compositions/auto-draft`: creates an async task that returns exactly three transient candidate drafts.
+- `POST /api/compositions/accepted`: accepts one candidate, creates a real `Draft`, creates five ordered `draft_items`, and records accepted composition metadata.
+- Candidate items use fixed roles: `hook`, `pain_point`, `solution`, `proof`, and `cta`.
+- Reference material is limited to approved fragments. If none match the brief, backend generates from the brief with `fallback_reason = "no_matching_fragments"`.
+- Accepted draft items preserve quote provenance in metadata and use first-class source fragment fields when a source fragment is selected.
+- Full contract: `doc/COMPOSITION_API.md`.

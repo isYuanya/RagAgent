@@ -3,18 +3,12 @@ import type {
   AnalysisSummary,
   AssetListResponse,
   CopyAsset,
-  KnowledgeBlock,
-  KnowledgeBlockCreate,
-  KnowledgeCase,
-  KnowledgeCaseCreate,
   KnowledgeCollection,
   KnowledgeCollectionCreate,
   FragmentExtractionBatchResponse,
   FragmentExtractionResult,
   KnowledgeFragment,
   KnowledgeFragmentCreate,
-  KnowledgeTag,
-  KnowledgeTagCreate,
   KnowledgeTemplate,
   KnowledgeTemplateCreate,
   FragmentFilters,
@@ -31,6 +25,12 @@ import type {
   DraftVersionSummary,
   AcceptRecommendationRequest,
   AcceptRecommendationResponse,
+  AcceptCompositionRequest,
+  AcceptCompositionResponse,
+  AcceptDiagnosticRewriteRequest,
+  AcceptDiagnosticRewriteResponse,
+  AutoCompositionRequest,
+  CopyDiagnosisRequest,
   NextSentenceRecommendationRequest,
   ListResponse,
   RawCopySummary,
@@ -47,6 +47,32 @@ async function parseJson(response: Response) {
   } catch {
     return null;
   }
+}
+
+// ---- Diagnostics ----
+
+const diagnosticsBase = `${apiBase}/api/diagnostics`;
+
+export function createCopyDiagnosis(
+  body: CopyDiagnosisRequest
+): Promise<TaskResponse> {
+  return writeJson(
+    `${diagnosticsBase}/copy`,
+    "POST",
+    body,
+    "创建文案诊断任务失败"
+  );
+}
+
+export function acceptDiagnosticRewrite(
+  body: AcceptDiagnosticRewriteRequest
+): Promise<AcceptDiagnosticRewriteResponse> {
+  return writeJson(
+    `${diagnosticsBase}/accepted-rewrite`,
+    "POST",
+    body,
+    "采纳诊断改写失败"
+  );
 }
 
 export async function fetchAssets(): Promise<CopyAsset[]> {
@@ -249,79 +275,6 @@ export function deleteTemplate(id: string): Promise<void> {
   return deleteResource(`${knowledgeBase}/templates/${id}`, "删除模板失败");
 }
 
-// tags
-
-export async function fetchTags(): Promise<KnowledgeTag[]> {
-  const response = await fetch(`${knowledgeBase}/tags?page=1&page_size=100`);
-  if (!response.ok) throw new Error("加载标签库失败");
-  const payload = (await response.json()) as ListResponse<KnowledgeTag>;
-  return payload.items;
-}
-
-export function createTag(body: KnowledgeTagCreate): Promise<KnowledgeTag> {
-  return writeJson(`${knowledgeBase}/tags`, "POST", body, "创建标签失败");
-}
-
-export function updateTag(
-  id: string,
-  body: Partial<KnowledgeTagCreate>
-): Promise<KnowledgeTag> {
-  return writeJson(`${knowledgeBase}/tags/${id}`, "PATCH", body, "更新标签失败");
-}
-
-export function deleteTag(id: string): Promise<void> {
-  return deleteResource(`${knowledgeBase}/tags/${id}`, "删除标签失败");
-}
-
-// cases
-
-export async function fetchCases(): Promise<KnowledgeCase[]> {
-  const response = await fetch(`${knowledgeBase}/cases?page=1&page_size=100`);
-  if (!response.ok) throw new Error("加载案例库失败");
-  const payload = (await response.json()) as ListResponse<KnowledgeCase>;
-  return payload.items;
-}
-
-export function createCase(body: KnowledgeCaseCreate): Promise<KnowledgeCase> {
-  return writeJson(`${knowledgeBase}/cases`, "POST", body, "创建案例失败");
-}
-
-export function updateCase(
-  id: string,
-  body: Partial<KnowledgeCaseCreate>
-): Promise<KnowledgeCase> {
-  return writeJson(`${knowledgeBase}/cases/${id}`, "PATCH", body, "更新案例失败");
-}
-
-export function deleteCase(id: string): Promise<void> {
-  return deleteResource(`${knowledgeBase}/cases/${id}`, "删除案例失败");
-}
-
-// blocks
-
-export async function fetchBlocks(): Promise<KnowledgeBlock[]> {
-  const response = await fetch(`${knowledgeBase}/blocks?page=1&page_size=100`);
-  if (!response.ok) throw new Error("加载禁用库失败");
-  const payload = (await response.json()) as ListResponse<KnowledgeBlock>;
-  return payload.items;
-}
-
-export function createBlock(
-  body: KnowledgeBlockCreate
-): Promise<KnowledgeBlock> {
-  return writeJson(`${knowledgeBase}/blocks`, "POST", body, "创建禁用项失败");
-}
-
-export function updateBlock(
-  id: string,
-  body: Partial<KnowledgeBlockCreate>
-): Promise<KnowledgeBlock> {
-  return writeJson(`${knowledgeBase}/blocks/${id}`, "PATCH", body, "更新禁用项失败");
-}
-
-export function deleteBlock(id: string): Promise<void> {
-  return deleteResource(`${knowledgeBase}/blocks/${id}`, "删除禁用项失败");
-}
 // fragments
 
 export async function fetchFragments(
@@ -512,5 +465,31 @@ export function acceptRecommendation(
     "POST",
     body,
     "采纳推荐失败"
+  );
+}
+
+// ---- Auto compositions ----
+
+const compositionsBase = `${apiBase}/api/compositions`;
+
+export function createAutoComposition(
+  body: AutoCompositionRequest
+): Promise<TaskResponse> {
+  return writeJson(
+    `${compositionsBase}/auto-draft`,
+    "POST",
+    body,
+    "创建自动组稿任务失败"
+  );
+}
+
+export function acceptComposition(
+  body: AcceptCompositionRequest
+): Promise<AcceptCompositionResponse> {
+  return writeJson(
+    `${compositionsBase}/accepted`,
+    "POST",
+    body,
+    "采纳自动组稿失败"
   );
 }

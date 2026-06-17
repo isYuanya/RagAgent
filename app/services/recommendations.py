@@ -2,7 +2,7 @@ import json
 from dataclasses import dataclass, field
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import settings
@@ -49,6 +49,25 @@ class _LLMCandidate(BaseModel):
     suggested_order_index: int = Field(default=0, ge=0)
     risk_warnings: list[dict] = Field(default_factory=list)
     reference_fragment_ids: list[str] = Field(default_factory=list)
+
+    @field_validator("risk_warnings", mode="before")
+    @classmethod
+    def _coerce_risk_warnings(cls, value):
+        if value is None:
+            return []
+        if isinstance(value, (str, dict)):
+            value = [value]
+        if not isinstance(value, list):
+            return []
+        coerced: list[dict] = []
+        for item in value:
+            if isinstance(item, dict):
+                coerced.append(item)
+            elif isinstance(item, str):
+                coerced.append({"message": item})
+            elif item is not None:
+                coerced.append({"message": str(item)})
+        return coerced
 
 
 class _LLMRecommendationResponse(BaseModel):
@@ -142,8 +161,10 @@ def accept_recommendation(payload: AcceptRecommendationRequest) -> AcceptRecomme
 
 def _get_recommendation_result(task_id: str) -> NextSentenceRecommendationResult:
     task = get_task(task_id)
-    if task is None:
-        task = _get_rq_task(task_id)
+    if task is None or task.result is None:
+        rq_task = _get_rq_task(task_id)
+        if rq_task is not None and rq_task.result is not None:
+            task = rq_task
     if task is None or task.result is None:
         raise RecommendationTaskNotFoundError()
     return NextSentenceRecommendationResult.model_validate(task.result)
@@ -283,6 +304,9 @@ def _build_prompt(
         "You are a short-form copywriting assistant. Recommend the next sentence or micro-paragraph "
         "for the current draft.\n"
         "Return one valid JSON object only. Do not return Markdown, code fences, or explanations.\n"
+        "All natural-language text fields (text, reason, tone, and every risk_warnings message and "
+        "suggestion) must be written in Simplified Chinese (简体中文). Keep enum-like fields "
+        "(function, next_function, risk_warnings level) in English.\n"
         "The candidate text must be original and must not copy reference fragments verbatim.\n"
         "Each candidate may contain 1-2 sentences and must be short enough to insert as one draft item.\n"
         "Infer the next_function, such as transition, pain_point, proof, solution, or cta.\n"

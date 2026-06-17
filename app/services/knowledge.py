@@ -7,13 +7,11 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import settings
 from app.db.session import SessionLocal
+from app.models.copy import CopySource
 from app.models.knowledge import (
     KnowledgeAnalysis,
-    KnowledgeBlock,
-    KnowledgeCase,
     KnowledgeCollection as KnowledgeCollectionModel,
     KnowledgeFragment,
-    KnowledgeTag,
     KnowledgeTemplate,
     copy_source_collections,
 )
@@ -23,12 +21,6 @@ from app.schemas.knowledge import (
     AnalysisListResponse,
     AnalysisSummary,
     AnalysisUpdate,
-    BlockCreate,
-    BlockItem,
-    BlockUpdate,
-    CaseCreate,
-    CaseItem,
-    CaseUpdate,
     FragmentCreate,
     FragmentItem,
     FragmentUpdate,
@@ -41,9 +33,6 @@ from app.schemas.knowledge import (
     RawCopyListResponse,
     RawCopySummary,
     RawCopyUpdate,
-    TagCreate,
-    TagItem,
-    TagUpdate,
     TemplateCreate,
     TemplateItem,
     TemplateUpdate,
@@ -63,12 +52,6 @@ class _Store:
     deleted_analyses: set[str] = field(default_factory=set)
     templates: dict[str, TemplateItem] = field(default_factory=dict)
     deleted_templates: set[str] = field(default_factory=set)
-    tags: dict[str, TagItem] = field(default_factory=dict)
-    deleted_tags: set[str] = field(default_factory=set)
-    cases: dict[str, CaseItem] = field(default_factory=dict)
-    deleted_cases: set[str] = field(default_factory=set)
-    blocks: dict[str, BlockItem] = field(default_factory=dict)
-    deleted_blocks: set[str] = field(default_factory=set)
     fragments: dict[str, FragmentItem] = field(default_factory=dict)
     deleted_fragments: set[str] = field(default_factory=set)
 
@@ -210,7 +193,7 @@ def list_analyses(page: int = 1, page_size: int = 20) -> AnalysisListResponse:
     db_manual = _db_list_knowledge_analyses()
     from_assets = []
     for asset in list_copy_assets(page=1, page_size=100).items:
-        if asset.auto_analysis is None:
+        if asset.auto_analysis is None or _is_projected_analysis_deleted(asset.id):
             continue
         from_assets.append(
             AnalysisSummary(
@@ -248,6 +231,8 @@ def get_analysis(analysis_id: str) -> AnalysisSummary | None:
         return db_item
     if analysis_id in _store.analyses:
         return _store.analyses[analysis_id]
+    if _is_projected_analysis_deleted(analysis_id):
+        return None
     asset = get_copy_asset(analysis_id)
     if asset is None or asset.auto_analysis is None:
         return None
@@ -274,11 +259,14 @@ def update_analysis(analysis_id: str, payload: AnalysisUpdate) -> AnalysisSummar
 
 def delete_analysis(analysis_id: str) -> bool:
     db_result = _db_delete_item(KnowledgeAnalysis, analysis_id)
-    if db_result is not None:
+    if db_result is True:
         return db_result
+    if db_result is False and get_analysis(analysis_id) is None:
+        return False
     if get_analysis(analysis_id) is None:
         return False
     _store.deleted_analyses.add(analysis_id)
+    _mark_projected_analysis_deleted(analysis_id)
     return True
 
 
@@ -352,102 +340,6 @@ def delete_template(item_id: str) -> bool:
     if db_result is not None:
         return db_result
     return _crud_delete(item_id, _store.templates, _store.deleted_templates)
-
-
-def list_tags(page: int = 1, page_size: int = 20) -> KnowledgeItemListResponse:
-    db_response = _db_list_items(KnowledgeTag, _tag_from_model, page, page_size)
-    return db_response or _crud_list(_store.tags, _store.deleted_tags, page, page_size)
-
-
-def create_tag(payload: TagCreate) -> TagItem:
-    payload = _with_source_display(payload)
-    db_item = _db_create_tag(payload)
-    if db_item is not None:
-        return db_item
-    return _crud_create(payload, TagItem, _store.tags)
-
-
-def get_tag(item_id: str) -> TagItem | None:
-    db_item = _db_get_item(KnowledgeTag, _tag_from_model, item_id)
-    return db_item or _crud_get(item_id, _store.tags, _store.deleted_tags)
-
-
-def update_tag(item_id: str, payload: TagUpdate) -> TagItem | None:
-    db_item = _db_update_tag(item_id, payload)
-    if db_item is not None:
-        return db_item
-    return _crud_update(item_id, payload, _store.tags, _store.deleted_tags)
-
-
-def delete_tag(item_id: str) -> bool:
-    db_result = _db_delete_item(KnowledgeTag, item_id)
-    if db_result is not None:
-        return db_result
-    return _crud_delete(item_id, _store.tags, _store.deleted_tags)
-
-
-def list_cases(page: int = 1, page_size: int = 20) -> KnowledgeItemListResponse:
-    db_response = _db_list_items(KnowledgeCase, _case_from_model, page, page_size)
-    return db_response or _crud_list(_store.cases, _store.deleted_cases, page, page_size)
-
-
-def create_case(payload: CaseCreate) -> CaseItem:
-    payload = _with_source_display(payload)
-    db_item = _db_create_case(payload)
-    if db_item is not None:
-        return db_item
-    return _crud_create(payload, CaseItem, _store.cases)
-
-
-def get_case(item_id: str) -> CaseItem | None:
-    db_item = _db_get_item(KnowledgeCase, _case_from_model, item_id)
-    return db_item or _crud_get(item_id, _store.cases, _store.deleted_cases)
-
-
-def update_case(item_id: str, payload: CaseUpdate) -> CaseItem | None:
-    db_item = _db_update_case(item_id, payload)
-    if db_item is not None:
-        return db_item
-    return _crud_update(item_id, payload, _store.cases, _store.deleted_cases)
-
-
-def delete_case(item_id: str) -> bool:
-    db_result = _db_delete_item(KnowledgeCase, item_id)
-    if db_result is not None:
-        return db_result
-    return _crud_delete(item_id, _store.cases, _store.deleted_cases)
-
-
-def list_blocks(page: int = 1, page_size: int = 20) -> KnowledgeItemListResponse:
-    db_response = _db_list_items(KnowledgeBlock, _block_from_model, page, page_size)
-    return db_response or _crud_list(_store.blocks, _store.deleted_blocks, page, page_size)
-
-
-def create_block(payload: BlockCreate) -> BlockItem:
-    payload = _with_source_display(payload)
-    db_item = _db_create_block(payload)
-    if db_item is not None:
-        return db_item
-    return _crud_create(payload, BlockItem, _store.blocks)
-
-
-def get_block(item_id: str) -> BlockItem | None:
-    db_item = _db_get_item(KnowledgeBlock, _block_from_model, item_id)
-    return db_item or _crud_get(item_id, _store.blocks, _store.deleted_blocks)
-
-
-def update_block(item_id: str, payload: BlockUpdate) -> BlockItem | None:
-    db_item = _db_update_block(item_id, payload)
-    if db_item is not None:
-        return db_item
-    return _crud_update(item_id, payload, _store.blocks, _store.deleted_blocks)
-
-
-def delete_block(item_id: str) -> bool:
-    db_result = _db_delete_item(KnowledgeBlock, item_id)
-    if db_result is not None:
-        return db_result
-    return _crud_delete(item_id, _store.blocks, _store.deleted_blocks)
 
 
 def list_fragments(
@@ -843,6 +735,46 @@ def _db_update_knowledge_analysis(
         db.close()
 
 
+def _is_projected_analysis_deleted(analysis_id: str) -> bool:
+    if analysis_id in _store.deleted_analyses:
+        return True
+    if _db_available is False:
+        return False
+    db = SessionLocal()
+    try:
+        source = db.get(CopySource, analysis_id)
+        if source is None:
+            return False
+        metadata = source.metadata_json or {}
+        _mark_db_available(True)
+        return metadata.get("analysis_deleted") is True
+    except SQLAlchemyError:
+        _mark_db_available(False)
+        return False
+    finally:
+        db.close()
+
+
+def _mark_projected_analysis_deleted(analysis_id: str) -> None:
+    if _db_available is False:
+        return
+    db = SessionLocal()
+    try:
+        source = db.get(CopySource, analysis_id)
+        if source is None:
+            return
+        metadata = dict(source.metadata_json or {})
+        metadata["analysis_deleted"] = True
+        source.metadata_json = metadata
+        db.commit()
+        _mark_db_available(True)
+    except SQLAlchemyError:
+        db.rollback()
+        _mark_db_available(False)
+    finally:
+        db.close()
+
+
 def _db_create_template(payload: TemplateCreate) -> TemplateItem | None:
     row = KnowledgeTemplate(
         title=payload.title,
@@ -866,58 +798,6 @@ def _db_update_template(item_id: str, payload: TemplateUpdate) -> TemplateItem |
             "suitable_scenarios": "suitable_scenarios_json",
             "metadata": "metadata_json",
         },
-    )
-
-
-def _db_create_tag(payload: TagCreate) -> TagItem | None:
-    row = KnowledgeTag(
-        name=payload.name,
-        category=payload.category,
-        description=payload.description,
-        metadata_json=payload.metadata,
-    )
-    _apply_source(row, payload.source)
-    return _db_add_item(row, _tag_from_model)
-
-
-def _db_update_tag(item_id: str, payload: TagUpdate) -> TagItem | None:
-    return _db_update_item(
-        KnowledgeTag, _tag_from_model, item_id, payload, {"metadata": "metadata_json"}
-    )
-
-
-def _db_create_case(payload: CaseCreate) -> CaseItem | None:
-    row = KnowledgeCase(
-        title=payload.title,
-        reason=payload.reason,
-        performance_summary=payload.performance_summary,
-        metadata_json=payload.metadata,
-    )
-    _apply_source(row, payload.source)
-    return _db_add_item(row, _case_from_model)
-
-
-def _db_update_case(item_id: str, payload: CaseUpdate) -> CaseItem | None:
-    return _db_update_item(
-        KnowledgeCase, _case_from_model, item_id, payload, {"metadata": "metadata_json"}
-    )
-
-
-def _db_create_block(payload: BlockCreate) -> BlockItem | None:
-    row = KnowledgeBlock(
-        content=payload.content,
-        block_type=payload.block_type,
-        reason=payload.reason,
-        severity=payload.severity,
-        metadata_json=payload.metadata,
-    )
-    _apply_source(row, payload.source)
-    return _db_add_item(row, _block_from_model)
-
-
-def _db_update_block(item_id: str, payload: BlockUpdate) -> BlockItem | None:
-    return _db_update_item(
-        KnowledgeBlock, _block_from_model, item_id, payload, {"metadata": "metadata_json"}
     )
 
 
@@ -1092,40 +972,6 @@ def _template_from_model(row: KnowledgeTemplate) -> TemplateItem:
         content=row.content,
         structure=row.structure_json or [],
         suitable_scenarios=row.suitable_scenarios_json or [],
-        source=_source_from_model(row),
-        metadata=row.metadata_json or {},
-    )
-
-
-def _tag_from_model(row: KnowledgeTag) -> TagItem:
-    return TagItem(
-        id=str(row.id),
-        name=row.name,
-        category=row.category,
-        description=row.description,
-        source=_source_from_model(row),
-        metadata=row.metadata_json or {},
-    )
-
-
-def _case_from_model(row: KnowledgeCase) -> CaseItem:
-    return CaseItem(
-        id=str(row.id),
-        title=row.title,
-        reason=row.reason,
-        performance_summary=row.performance_summary,
-        source=_source_from_model(row),
-        metadata=row.metadata_json or {},
-    )
-
-
-def _block_from_model(row: KnowledgeBlock) -> BlockItem:
-    return BlockItem(
-        id=str(row.id),
-        content=row.content,
-        block_type=row.block_type,
-        reason=row.reason,
-        severity=row.severity,
         source=_source_from_model(row),
         metadata=row.metadata_json or {},
     )

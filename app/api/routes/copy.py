@@ -83,6 +83,8 @@ def delete_asset(asset_id: str) -> None:
         raise HTTPException(status_code=404, detail="Copy asset not found")
     if result == "conflict":
         raise HTTPException(status_code=409, detail="Only pending_review assets can be deleted")
+    if result == "unavailable":
+        raise HTTPException(status_code=503, detail="Database is unavailable; copy asset was not deleted")
 
 
 def _llm_http_error(exc: RuntimeError) -> HTTPException:

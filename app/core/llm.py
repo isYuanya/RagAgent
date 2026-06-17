@@ -24,7 +24,7 @@ class OpenAICompatibleLLMClient:
                 api_key=settings.openai_api_key,
                 base_url=self.base_url,
                 model=self.model,
-                timeout=60,
+                timeout=settings.openai_timeout,
                 max_retries=1,
             )
             response = llm.invoke(prompt)

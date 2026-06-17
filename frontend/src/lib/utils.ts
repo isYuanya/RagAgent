@@ -34,3 +34,43 @@ const PHASE_LABELS: Record<string, string> = {
 export function phaseLabel(phase: string): string {
   return PHASE_LABELS[phase] ?? phase;
 }
+
+const ROLE_LABELS: Record<string, string> = {
+  hook: "开头钩子",
+  pain_point: "痛点",
+  solution: "解决方案",
+  proof: "证明背书",
+  transition: "过渡句",
+  cta: "行动引导",
+  explanation: "解释说明",
+  diagnostic_rewrite: "诊断改写"
+};
+
+const POSITION_LABELS: Record<string, string> = {
+  opening: "开头",
+  middle: "中段",
+  body: "正文中段",
+  ending: "结尾",
+  full_copy: "全文"
+};
+
+const QUOTE_MODE_LABELS: Record<string, string> = {
+  direct: "直接引用",
+  adapted: "改写借鉴",
+  original: "原创生成"
+};
+
+export function formatRoleLabel(value?: string | null): string {
+  if (!value) return "未标角色";
+  return ROLE_LABELS[value] ?? value;
+}
+
+export function formatPositionLabel(value?: string | null): string {
+  if (!value) return "未标位置";
+  return POSITION_LABELS[value] ?? value;
+}
+
+export function formatQuoteModeLabel(value?: string | null): string {
+  if (!value) return "未标引用方式";
+  return QUOTE_MODE_LABELS[value] ?? value;
+}

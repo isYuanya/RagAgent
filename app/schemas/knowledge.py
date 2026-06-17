@@ -129,68 +129,6 @@ class TemplateItem(TemplateCreate):
     id: str
 
 
-class TagCreate(BaseModel):
-    name: str = Field(min_length=1)
-    category: Literal["industry", "emotion", "purpose", "audience", "hook_type", "custom"]
-    description: str | None = None
-    source: SourceReference | None = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-
-class TagUpdate(BaseModel):
-    name: str | None = Field(default=None, min_length=1)
-    category: Literal["industry", "emotion", "purpose", "audience", "hook_type", "custom"] | None = None
-    description: str | None = None
-    source: SourceReference | None = None
-    metadata: dict[str, Any] | None = None
-
-
-class TagItem(TagCreate):
-    id: str
-
-
-class CaseCreate(BaseModel):
-    title: str = Field(min_length=1)
-    reason: str = Field(min_length=1)
-    performance_summary: str | None = None
-    source: SourceReference | None = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-
-class CaseUpdate(BaseModel):
-    title: str | None = Field(default=None, min_length=1)
-    reason: str | None = Field(default=None, min_length=1)
-    performance_summary: str | None = None
-    source: SourceReference | None = None
-    metadata: dict[str, Any] | None = None
-
-
-class CaseItem(CaseCreate):
-    id: str
-
-
-class BlockCreate(BaseModel):
-    content: str = Field(min_length=1)
-    block_type: Literal["sensitive_word", "violation", "do_not_copy", "custom"]
-    reason: str | None = None
-    severity: Literal["low", "medium", "high"] = "medium"
-    source: SourceReference | None = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-
-class BlockUpdate(BaseModel):
-    content: str | None = Field(default=None, min_length=1)
-    block_type: Literal["sensitive_word", "violation", "do_not_copy", "custom"] | None = None
-    reason: str | None = None
-    severity: Literal["low", "medium", "high"] | None = None
-    source: SourceReference | None = None
-    metadata: dict[str, Any] | None = None
-
-
-class BlockItem(BlockCreate):
-    id: str
-
-
 class FragmentCreate(BaseModel):
     source_copy_id: str
     analysis_id: str | None = None
@@ -254,7 +192,7 @@ class FragmentExtractionBatchResponse(BaseModel):
 
 
 class KnowledgeItemListResponse(BaseModel):
-    items: list[TemplateItem | TagItem | CaseItem | BlockItem | FragmentItem]
+    items: list[TemplateItem | FragmentItem]
     page: int = Field(ge=1)
     page_size: int = Field(ge=1, le=100)
     total: int = Field(ge=0)

@@ -79,64 +79,6 @@ class KnowledgeAnalysis(Base):
     )
 
 
-class KnowledgeTag(Base):
-    __tablename__ = "knowledge_tags"
-
-    id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
-    )
-    name: Mapped[str] = mapped_column(String(200))
-    category: Mapped[str] = mapped_column(String(50))
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    source_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    source_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
-    metadata_json: Mapped[dict] = mapped_column(JSONB, default=dict)
-    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
-
-
-class KnowledgeCase(Base):
-    __tablename__ = "knowledge_cases"
-
-    id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
-    )
-    title: Mapped[str] = mapped_column(String(300))
-    reason: Mapped[str] = mapped_column(Text)
-    performance_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
-    source_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    source_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
-    metadata_json: Mapped[dict] = mapped_column(JSONB, default=dict)
-    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
-
-
-class KnowledgeBlock(Base):
-    __tablename__ = "knowledge_blocks"
-
-    id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
-    )
-    content: Mapped[str] = mapped_column(Text)
-    block_type: Mapped[str] = mapped_column(String(50))
-    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
-    severity: Mapped[str] = mapped_column(String(20), default="medium")
-    source_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    source_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
-    metadata_json: Mapped[dict] = mapped_column(JSONB, default=dict)
-    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
-
-
 class KnowledgeFragment(Base):
     __tablename__ = "knowledge_fragments"
 

@@ -5,7 +5,7 @@
 ### 1. Scope / Trigger
 
 - Trigger: backend work that changes `/api/knowledge/*`, copy asset persistence, or knowledge database tables.
-- Applies to the seven system libraries: raw copies, analyses, fragments, templates, tags, cases, and blocks.
+- Applies to the active system libraries: raw copies, analyses, fragments, and templates.
 - Also applies to collections, which group raw copies across business contexts.
 
 ### 2. Signatures
@@ -29,15 +29,6 @@ GET|PATCH|DELETE /api/knowledge/fragments/{id}
 
 GET|POST   /api/knowledge/templates
 GET|PATCH|DELETE /api/knowledge/templates/{id}
-
-GET|POST   /api/knowledge/tags
-GET|PATCH|DELETE /api/knowledge/tags/{id}
-
-GET|POST   /api/knowledge/cases
-GET|PATCH|DELETE /api/knowledge/cases/{id}
-
-GET|POST   /api/knowledge/blocks
-GET|PATCH|DELETE /api/knowledge/blocks/{id}
 ```
 
 Database tables:
@@ -48,9 +39,6 @@ copy_source_collections
 knowledge_analyses
 knowledge_fragments
 knowledge_templates
-knowledge_tags
-knowledge_cases
-knowledge_blocks
 ```
 
 ### 3. Contracts
@@ -59,7 +47,7 @@ knowledge_blocks
 - `raw-copies` also accepts optional `collection_id`.
 - `fragments` also accepts optional `source_copy_id`, `fragment_role`, `position`, and `industry`.
 - Delete endpoints return `204` and use soft-delete semantics where the backing table has `is_deleted`.
-- Templates, tags, cases, and blocks accept optional source traceability:
+- Templates accept optional source traceability:
 
 ```json
 {"source": {"source_type": "raw_copy", "source_id": "<id>", "source_display": "original copy excerpt"}}
@@ -77,12 +65,13 @@ knowledge_blocks
 | Delete existing resource | `204` |
 | Deleted resource fetched again | `404` |
 | Database unavailable in local dev | Service falls back to in-memory store where implemented |
+| Database unavailable while deleting a PostgreSQL-backed raw copy | `503` and the cached copy is not treated as durably deleted |
 
 ### 5. Good/Base/Bad Cases
 
 - Good: CSV import creates a raw copy and auto analysis; both appear through `/api/knowledge/raw-copies` and `/api/knowledge/analyses`.
-- Good: CSV/text import derives reusable template, tags, risk blocks, and performance case records from the analysis when the relevant fields are present.
-- Base: manually created templates/tags/cases/blocks persist with optional source reference.
+- Good: CSV/text import derives reusable template records from the analysis when the relevant fields are present.
+- Base: manually created templates persist with optional source reference.
 - Base: manually created fragments persist with explicit `source_copy_id`, sequence/context fields, and optional `analysis_id`.
 - Bad: do not create a fake empty analysis just to store a raw copy; raw copies may have `auto_analysis = null`.
 - Bad: do not store fragment provenance only inside `metadata`; use the first-class `source_copy_id`.
@@ -90,7 +79,7 @@ knowledge_blocks
 ### 6. Tests Required
 
 - API test for collection CRUD and raw copy collection assignment.
-- API test for template/tag/case/block CRUD with `source`.
+- API test for template CRUD with `source`.
 - API test for fragment CRUD and filters by `source_copy_id`, `fragment_role`, `position`, or `industry`.
 - API test that CSV import populates raw copy and analysis libraries.
 - Full backend regression: `python -m pytest`.
@@ -156,7 +145,7 @@ Fragment provenance and ordering are first-class fields so filtering and future 
 - Manual and batch extraction endpoints return per-copy status: `created`, `skipped`, or `failed`. LLM/configuration failures must be visible in `message` instead of being swallowed.
 - List filters currently supported by backend contract: `source_copy_id`, `fragment_role`, `position`, `industry`, `status`, `platform`, `purpose`, `audience`, `risk_level`, and `q`.
 - The `q` filter is keyword search against fragment text and context, not vector retrieval.
-- Fragment CRUD must follow the same DB-first, in-memory fallback pattern as templates/tags/cases/blocks and must be covered by API tests.
+- Fragment CRUD must follow the same DB-first, in-memory fallback pattern as templates and must be covered by API tests.
 - Backfill extraction must be idempotent by `source_copy_id`; if fragments already exist, return `skipped` with the existing fragment count.
 
 ## Copy Import Contract
@@ -186,11 +175,8 @@ Fragment provenance and ordering are first-class fields so filtering and future 
 - `COPY_AUTO_APPROVE_MIN_CONFIDENCE` defaults to `0.85` and must stay configurable through backend settings.
 - After a copy asset is imported and analyzed, backend synchronizes selected analysis fields into specialized knowledge libraries:
   - `reusable_template`, `structure`, and `suitable_scenarios` create one template item.
-  - `industry`, `purpose`, `audience` or `target_user`, `emotion_buttons`, `hook`, and `expression_skills` create tag items.
-  - `risk_warnings` create block items with `block_type = violation` and matching severity.
-  - Non-empty positive `metrics` create a case item with a performance summary.
-- Derived knowledge items are idempotent by source asset id, derived kind, and derived content key, so repeated imports/reviews do not create duplicates for the same analysis content.
-- Derived templates/tags/cases/blocks must keep `source.source_type = raw_copy`, `source.source_id = copy asset id`, and a frontend-friendly `source.source_display` excerpt.
+- Derived template items are idempotent by source asset id, derived kind, and derived content key, so repeated imports/reviews do not create duplicates for the same analysis content.
+- Derived templates must keep `source.source_type = raw_copy`, `source.source_id = copy asset id`, and a frontend-friendly `source.source_display` excerpt.
 - Import post-processing must also trigger fragment extraction when the imported asset status is already `approved`, using the same idempotent path as manual extraction.
 
 ## Copy Asset Delete Contract
@@ -200,6 +186,8 @@ Fragment provenance and ordering are first-class fields so filtering and future 
 - Successful delete returns `204`; subsequent asset detail requests return `404` and list endpoints omit the asset.
 - Database-backed delete is a soft delete using `copy_sources.metadata_json.deleted = true`.
 - Redis and in-memory fallbacks remove the asset id from the active cache/order.
+- A PostgreSQL-backed asset must not fall back to Redis or in-memory deletion when the database delete cannot be confirmed.
+- If the database is unavailable for a PostgreSQL-backed asset delete, return `503`; do not return `204` because the copy would reappear after backend restart.
 
 ## Scenario: System Status Diagnostics
 
@@ -492,3 +480,72 @@ Frontend calls POST /api/recommendations/accepted, and backend inserts the draft
 ```
 
 Recommendation responses must be directly displayable by the frontend without showing raw ids as the primary source information.
+
+## Scenario: Auto Composition
+
+### 1. Scope / Trigger
+
+- Trigger: backend work that changes Phase 5 AI auto-composition, composition tasks, accepted composition persistence, or draft creation from accepted candidates.
+- Applies to `/api/compositions/*`, task polling through `/api/tasks/{task_id}`, approved-fragment retrieval, draft creation, and the `accepted_compositions` table.
+- The frontend owns brief input and candidate selection; backend owns candidate generation, provenance, and acceptance consistency.
+
+### 2. Signatures
+
+```text
+POST /api/compositions/auto-draft
+POST /api/compositions/accepted
+GET  /api/tasks/{task_id}
+```
+
+`POST /api/compositions/auto-draft` returns `TaskResponse`.
+
+`TaskResponse.result` is an `AutoCompositionResult` when finished.
+
+Database table:
+
+```text
+accepted_compositions
+```
+
+### 3. Contracts
+
+- Auto-composition generation is asynchronous and reuses the `recommendation` queue.
+- The result must contain exactly three transient candidates.
+- Each candidate must contain exactly five items in fixed order: `hook`, `pain_point`, `solution`, `proof`, and `cta`.
+- The MVP may use only approved fragments as reference material. Do not require templates, Milvus, vector retrieval, or reranking.
+- Fragment retrieval must keep structured filters from the brief: `platform`, `purpose`, and `audience`, plus keyword queries from `product` and `key_selling_points`.
+- If no approved fragments match, generation must continue from the brief with `fallback_reason = "no_matching_fragments"`.
+- Fallback items must use `quote_mode = "original"` and empty `reference_fragment_ids`.
+- Direct copying of source fragment text is allowed only when `quote_mode = "direct"` and provenance is retained.
+- Unaccepted candidates are not persisted as standalone durable rows.
+- Accepting a candidate creates a real `Draft`, creates five ordered `draft_items`, and records one accepted composition in one backend operation.
+- Accepted draft item metadata must include `quote_mode`, `reference_fragment_ids`, `generation_task_id`, `generation_candidate_id`, and `generation_reason`.
+- When an item has reference fragments, the first valid fragment is the primary `source_fragment_id`; the draft service should populate `source_copy_id`.
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior |
+| --- | --- |
+| Invalid request shape | FastAPI/Pydantic `422` |
+| Missing composition task | `404` |
+| Missing candidate | `404` |
+| LLM failure | task status becomes `failed` with progress/error details |
+| Redis unavailable in local dev | service falls back to synchronous in-memory task execution |
+
+### 5. Good/Base/Bad Cases
+
+- Good: frontend creates a composition task, polls status, previews three candidates with references, accepts one, and opens the returned draft.
+- Good: accepted direct quotes preserve source fragment ids and quote mode in draft item metadata.
+- Base: no matching fragments still returns three candidates generated from the brief.
+- Bad: do not persist every generated candidate before user acceptance.
+- Bad: do not let the frontend create the draft and separately record acceptance; this can break provenance and analytics.
+
+### 6. Tests Required
+
+- API test that auto-composition task returns exactly three candidates and five items each.
+- API test that matching approved fragments are included as references.
+- API test that no matching fragments produces fallback candidates, not task failure.
+- API test that accepting a candidate creates one draft with five items and provenance metadata.
+- API test for missing task/candidate behavior.
+- Static check: `python -m ruff check app tests alembic`.
+- Full backend regression: `python -m pytest`.

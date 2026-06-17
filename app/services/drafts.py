@@ -124,6 +124,34 @@ def archive_draft(draft_id: str) -> bool:
     return update_draft(draft_id, payload) is not None
 
 
+def replace_draft_text(
+    draft_id: str,
+    text: str,
+    role: str | None = None,
+    position: str | None = None,
+    metadata: dict | None = None,
+) -> DraftDetail:
+    db_item = _db_replace_draft_text(draft_id, text, role, position, metadata or {})
+    if db_item is not None:
+        return db_item
+    draft = get_draft(draft_id)
+    if draft is None:
+        raise DraftNotFoundError()
+    draft.items = [
+        DraftItem(
+            id=str(uuid4()),
+            draft_id=draft_id,
+            order_index=0,
+            edited_text=text,
+            role=role,
+            position=position,
+            metadata=metadata or {},
+        )
+    ]
+    _store.drafts[draft_id] = _refresh_detail(draft)
+    return _store.drafts[draft_id]
+
+
 def add_draft_item(draft_id: str, payload: DraftItemCreate) -> DraftDetail:
     db_item = _db_add_draft_item(draft_id, payload)
     if db_item is not None:
@@ -389,6 +417,52 @@ def _db_add_draft_item(draft_id: str, payload: DraftItemCreate) -> DraftDetail |
             _mark_db_available(True)
             return _detail_from_model(refreshed)
     except (DraftNotFoundError, SourceFragmentNotFoundError):
+        raise
+    except SQLAlchemyError:
+        _mark_db_available(False)
+        return None
+
+
+def _db_replace_draft_text(
+    draft_id: str,
+    text: str,
+    role: str | None,
+    position: str | None,
+    metadata: dict,
+) -> DraftDetail | None:
+    if _db_available is False:
+        return None
+    try:
+        with SessionLocal() as session:
+            draft = session.scalar(
+                select(DraftModel)
+                .options(selectinload(DraftModel.items))
+                .where(DraftModel.id == draft_id)
+            )
+            if draft is None:
+                raise DraftNotFoundError()
+            for item in list(draft.items):
+                session.delete(item)
+            session.flush()
+            session.add(
+                DraftItemModel(
+                    draft_id=draft_id,
+                    order_index=0,
+                    edited_text=text,
+                    role=role,
+                    position=position,
+                    metadata_json=metadata,
+                )
+            )
+            session.commit()
+            refreshed = session.scalar(
+                select(DraftModel)
+                .options(selectinload(DraftModel.items))
+                .where(DraftModel.id == draft_id)
+            )
+            _mark_db_available(True)
+            return _detail_from_model(refreshed)
+    except DraftNotFoundError:
         raise
     except SQLAlchemyError:
         _mark_db_available(False)

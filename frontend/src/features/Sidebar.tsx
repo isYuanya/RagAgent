@@ -1,7 +1,14 @@
-import { Database, FileText, Library, NotebookPen, ServerCog } from "lucide-react";
+import {
+  Database,
+  FileText,
+  Library,
+  NotebookPen,
+  ServerCog,
+  ShieldCheck
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type AppView = "workbench" | "drafts" | "knowledge" | "system";
+export type AppView = "workbench" | "drafts" | "diagnostics" | "knowledge" | "system";
 
 export function Sidebar({
   view,
@@ -36,6 +43,12 @@ export function Sidebar({
           label="草稿工作台"
           active={view === "drafts"}
           onClick={() => onChangeView("drafts")}
+        />
+        <SidebarItem
+          icon={<ShieldCheck className="size-4" />}
+          label="文案诊断"
+          active={view === "diagnostics"}
+          onClick={() => onChangeView("diagnostics")}
         />
         <SidebarItem
           icon={<Library className="size-4" />}

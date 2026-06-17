@@ -61,7 +61,7 @@ def test_collection_and_raw_copy_crud() -> None:
     assert client.get(f"/api/knowledge/raw-copies/{raw_payload['id']}").status_code == 404
 
 
-def test_template_tag_case_and_block_crud_with_source_reference() -> None:
+def test_template_crud_with_source_reference() -> None:
     raw_response = client.post(
         "/api/knowledge/raw-copies",
         json={"source_text": "如果你总觉得没效果，先检查顺序。"},
@@ -79,37 +79,6 @@ def test_template_tag_case_and_block_crud_with_source_reference() -> None:
     assert template_response.status_code == 200
     template_id = template_response.json()["id"]
     assert template_response.json()["source"]["source_id"] == raw_id
-
-    tag_response = client.post(
-        "/api/knowledge/tags",
-        json={
-            "name": "共鸣",
-            "category": "emotion",
-            "source": {"source_type": "raw_copy", "source_id": raw_id},
-        },
-    )
-    assert tag_response.status_code == 200
-
-    case_response = client.post(
-        "/api/knowledge/cases",
-        json={
-            "title": "高收藏护肤案例",
-            "reason": "开头直接命中使用误区。",
-            "source": {"source_type": "raw_copy", "source_id": raw_id},
-        },
-    )
-    assert case_response.status_code == 200
-
-    block_response = client.post(
-        "/api/knowledge/blocks",
-        json={
-            "content": "百分百有效",
-            "block_type": "violation",
-            "reason": "绝对化承诺",
-            "source": {"source_type": "raw_copy", "source_id": raw_id},
-        },
-    )
-    assert block_response.status_code == 200
 
     update_response = client.patch(
         f"/api/knowledge/templates/{template_id}",
@@ -210,6 +179,34 @@ def test_copy_import_populates_raw_copy_and_analysis_libraries(monkeypatch) -> N
     )
     assert review_response.status_code == 200
     assert review_response.json()["status"] == "approved"
+
+
+def test_delete_projected_asset_analysis_when_manual_analysis_row_is_missing(monkeypatch) -> None:
+    monkeypatch.setattr("app.services.copy_analysis.get_llm_client", lambda: FakeLLMClient())
+    monkeypatch.setattr("app.api.routes.copy.enqueue_copy_import", lambda csv_text, collection_ids=None: __import__(
+        "app.services.copy_import_jobs", fromlist=["run_copy_import_task"]
+    ).run_copy_import_task(csv_text, collection_ids=collection_ids or []))
+
+    response = client.post(
+        "/api/copy/import",
+        json={"csv_text": "source_text\n鍏堝埆鎬ョ潃鎹骇鍝併€?\n"},
+    )
+    assert response.status_code == 200
+    asset_id = response.json()["result"]["asset_ids"][0]
+
+    analysis_response = client.get("/api/knowledge/analyses")
+    assert analysis_response.status_code == 200
+    assert analysis_response.json()["total"] == 1
+    assert analysis_response.json()["items"][0]["id"] == asset_id
+
+    monkeypatch.setattr("app.services.knowledge._db_delete_item", lambda *_args: False)
+    delete_response = client.delete(f"/api/knowledge/analyses/{asset_id}")
+    assert delete_response.status_code == 204
+
+    assert client.get(f"/api/knowledge/analyses/{asset_id}").status_code == 404
+    list_after_delete = client.get("/api/knowledge/analyses")
+    assert list_after_delete.status_code == 200
+    assert list_after_delete.json()["total"] == 0
 
 
 def test_copy_import_assigns_assets_to_collection(monkeypatch) -> None:

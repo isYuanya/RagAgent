@@ -37,6 +37,8 @@ class Settings:
     openai_base_url: str = "https://api.openai.com/v1"
     # 文案拆解、审核等文本任务使用的默认模型。
     openai_model: str = "gpt-4.1-mini"
+    # 单次 LLM 请求超时秒数；推理型模型首字延迟较高，可调大。
+    openai_timeout: float = 180.0
     # 向量化模型名称，供后续知识库检索使用。
     embedding_model: str = "text-embedding-3-small"
     # LLM 自动审核通过阈值；低于该置信度的文案进入人工再审。
@@ -96,6 +98,7 @@ def get_settings() -> Settings:
         openai_api_key=os.getenv("OPENAI_API_KEY") or None,
         openai_base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
         openai_model=os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
+        openai_timeout=_env_float("OPENAI_TIMEOUT", 180.0),
         embedding_model=os.getenv("EMBEDDING_MODEL", "text-embedding-3-small"),
         copy_auto_approve_min_confidence=_env_float("COPY_AUTO_APPROVE_MIN_CONFIDENCE", 0.85),
         fragment_auto_approve_min_confidence=_env_float(

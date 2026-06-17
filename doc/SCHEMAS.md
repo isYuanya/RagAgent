@@ -192,11 +192,8 @@ CSV 必须包含表头 `source_text`。当前支持的列：
 | `RawCopySummary` | 原始文案库条目，继承文案资产字段，并增加 `collection_ids` 和 `collections` |
 | `AnalysisSummary` | 结构化拆解库条目，包含 `raw_copy_id`、`auto_analysis`、`reviewed_analysis`、`status` |
 | `TemplateItem` | 模板库条目，保存句式、框架、适用场景 |
-| `TagItem` | 标签库条目，保存行业、情绪、目的、人群、钩子类型 |
-| `CaseItem` | 案例库条目，保存高表现原因 |
-| `BlockItem` | 禁用库条目，保存敏感词、违规表达、不要复刻内容 |
 
-模板、标签、案例、禁用项共享来源追溯字段：
+模板支持来源追溯字段：
 
 ```json
 {
@@ -282,12 +279,7 @@ After CSV or plain-text import finishes, backend derives specialized knowledge r
 the copy analysis.
 
 - Template library: `reusable_template`, `structure`, and `suitable_scenarios`.
-- Tag library: source `industry`, `purpose`, `audience`, analysis `target_user`,
-  `emotion_buttons`, `hook`, and `expression_skills`.
-- Block library: `risk_warnings`.
-- Case library: positive performance `metrics`.
-
-Template, tag, case, and block responses keep source traceability:
+Template responses keep source traceability:
 
 ```json
 {
@@ -315,3 +307,19 @@ endpoint is called.
 - 删除成功返回 `204`，响应体为空。
 - 资产不存在或已删除返回 `404`。
 - 资产已经审核通过或拒绝返回 `409`。
+
+## 9. Phase 5 Auto Composition Schemas
+
+See `doc/COMPOSITION_API.md` for examples and endpoint flow.
+
+New schemas live in `app/schemas/composition.py`:
+
+- `AutoCompositionBrief`: structured brief with `product`, `audience`, `platform`, `purpose`, `style`, `key_selling_points`, optional `constraints`, optional `target_length`, and `metadata`.
+- `AutoCompositionRequest`: wraps `brief` for `POST /api/compositions/auto-draft`.
+- `AutoCompositionResult`: finished task result with `brief`, `model`, optional `fallback_reason`, exactly three `candidates`, and display-ready `reference_fragments`.
+- `CompositionCandidate`: transient candidate with `candidate_id`, `title`, `strategy`, exactly five `items`, and candidate-level `reference_fragment_ids`.
+- `CompositionItemCandidate`: item with fixed role, position, text, `quote_mode`, `reference_fragment_ids`, optional `source_copy_id`, and `reason`.
+- `AcceptCompositionRequest`: `task_id`, `candidate_id`, and optional `metadata`.
+- `AcceptCompositionResponse`: accepted composition metadata plus the created `DraftDetail`.
+
+Composition item roles are fixed to `hook`, `pain_point`, `solution`, `proof`, and `cta`. `quote_mode` is `direct`, `adapted`, or `original`.
