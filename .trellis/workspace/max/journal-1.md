@@ -138,3 +138,36 @@ Added backend system status endpoint for PostgreSQL, Redis, copy_import worker, 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 5: Phase 3 draft workspace backend
+
+**Date**: 2026-06-17
+**Task**: Phase 3 draft workspace backend
+**Branch**: `master`
+
+### Summary
+
+Implemented backend draft workspace APIs with persistence models, version snapshots, frontend API docs, Trellis spec updates, and regression tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6299d35` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
