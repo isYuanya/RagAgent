@@ -9,6 +9,7 @@ import { AssetList } from "@/features/AssetList";
 import { ReviewPanel } from "@/features/ReviewPanel";
 import { DraftWorkbenchView } from "@/features/drafts/DraftWorkbenchView";
 import { DiagnosticView } from "@/features/diagnostics/DiagnosticView";
+import { SmartCompositionView } from "@/features/assistant/SmartCompositionView";
 import { KnowledgeView } from "@/features/knowledge/KnowledgeView";
 import { SystemStatusBadge } from "@/features/system/SystemStatusBadge";
 import { SystemStatusView } from "@/features/system/SystemStatusView";
@@ -312,6 +313,8 @@ export function App() {
         />
       ) : view === "drafts" ? (
         <DraftWorkbenchView headerAction={statusBadge} />
+      ) : view === "assistant" ? (
+        <SmartCompositionView headerAction={statusBadge} />
       ) : view === "diagnostics" ? (
         <DiagnosticView headerAction={statusBadge} />
       ) : view === "knowledge" ? (

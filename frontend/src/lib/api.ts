@@ -31,6 +31,12 @@ import type {
   AcceptDiagnosticRewriteResponse,
   AutoCompositionRequest,
   CopyDiagnosisRequest,
+  SmartCompositionBriefPrefillResponse,
+  SmartCompositionOptions,
+  SmartCompositionRunCreate,
+  SmartCompositionRunDetail,
+  SmartCompositionRunListResponse,
+  SmartCompositionRunSummary,
   NextSentenceRecommendationRequest,
   ListResponse,
   RawCopySummary,
@@ -471,6 +477,45 @@ export function acceptRecommendation(
 // ---- Auto compositions ----
 
 const compositionsBase = `${apiBase}/api/compositions`;
+const assistantBase = `${apiBase}/api/assistant`;
+
+export async function fetchSmartCompositionOptions(): Promise<SmartCompositionOptions> {
+  const response = await fetch(`${assistantBase}/options`);
+  if (!response.ok) throw new Error("加载智能组稿选项失败");
+  return (await response.json()) as SmartCompositionOptions;
+}
+
+export function prefillSmartCompositionBrief(
+  text: string
+): Promise<SmartCompositionBriefPrefillResponse> {
+  return writeJson(
+    `${assistantBase}/brief-prefill`,
+    "POST",
+    { text },
+    "解析组稿需求失败"
+  );
+}
+
+export function createSmartCompositionRun(
+  body: SmartCompositionRunCreate
+): Promise<SmartCompositionRunDetail> {
+  return writeJson(`${assistantBase}/runs`, "POST", body, "启动智能组稿失败");
+}
+
+export async function fetchSmartCompositionRuns(): Promise<SmartCompositionRunSummary[]> {
+  const response = await fetch(`${assistantBase}/runs?page=1&page_size=30`);
+  if (!response.ok) throw new Error("加载智能组稿历史失败");
+  const payload = (await response.json()) as SmartCompositionRunListResponse;
+  return payload.items;
+}
+
+export async function fetchSmartCompositionRun(
+  id: string
+): Promise<SmartCompositionRunDetail> {
+  const response = await fetch(`${assistantBase}/runs/${id}`);
+  if (!response.ok) throw new Error("加载智能组稿详情失败");
+  return (await response.json()) as SmartCompositionRunDetail;
+}
 
 export function createAutoComposition(
   body: AutoCompositionRequest

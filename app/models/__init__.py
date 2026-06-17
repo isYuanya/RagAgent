@@ -11,6 +11,7 @@ from app.models.knowledge import (
     copy_source_collections,
 )
 from app.models.recommendation import AcceptedRecommendation
+from app.models.smart_composition import SmartCompositionRun
 from app.models.template import Template
 
 __all__ = [
@@ -27,6 +28,7 @@ __all__ = [
     "KnowledgeFragment",
     "KnowledgeTemplate",
     "AcceptedRecommendation",
+    "SmartCompositionRun",
     "Template",
     "copy_source_collections",
 ]

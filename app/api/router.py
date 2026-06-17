@@ -10,6 +10,7 @@ from app.api.routes import (
     health,
     knowledge,
     recommendations,
+    smart_composition,
     system,
     tasks,
 )
@@ -25,4 +26,5 @@ api_router.include_router(drafts.router, prefix="/drafts", tags=["drafts"])
 api_router.include_router(recommendations.router, prefix="/recommendations", tags=["recommendations"])
 api_router.include_router(compositions.router, prefix="/compositions", tags=["compositions"])
 api_router.include_router(diagnostics.router, prefix="/diagnostics", tags=["diagnostics"])
+api_router.include_router(smart_composition.router, prefix="/assistant", tags=["assistant"])
 api_router.include_router(system.router, prefix="/system", tags=["system"])

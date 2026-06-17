@@ -1,4 +1,5 @@
 import {
+  Bot,
   Database,
   FileText,
   Library,
@@ -8,7 +9,13 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type AppView = "workbench" | "drafts" | "diagnostics" | "knowledge" | "system";
+export type AppView =
+  | "workbench"
+  | "drafts"
+  | "assistant"
+  | "diagnostics"
+  | "knowledge"
+  | "system";
 
 export function Sidebar({
   view,
@@ -43,6 +50,12 @@ export function Sidebar({
           label="草稿工作台"
           active={view === "drafts"}
           onClick={() => onChangeView("drafts")}
+        />
+        <SidebarItem
+          icon={<Bot className="size-4" />}
+          label="智能组稿助手"
+          active={view === "assistant"}
+          onClick={() => onChangeView("assistant")}
         />
         <SidebarItem
           icon={<ShieldCheck className="size-4" />}

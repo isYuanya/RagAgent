@@ -356,6 +356,112 @@ export type AutoCompositionBrief = {
   metadata?: Record<string, unknown>;
 };
 
+export type SmartCompositionBrief = AutoCompositionBrief & {
+  collection_ids?: string[];
+  extra_notes?: string | null;
+};
+
+export type SmartCompositionMode = "auto" | "guided";
+export type SmartCompositionStatus =
+  | "pending"
+  | "running"
+  | "waiting_for_user"
+  | "finished"
+  | "failed";
+export type SmartCompositionStepStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "waiting_for_user"
+  | "failed";
+
+export type SmartCompositionOption = {
+  value: string;
+  label: string;
+  description?: string | null;
+};
+
+export type SmartCompositionOptions = {
+  collections: KnowledgeCollection[];
+  platforms: SmartCompositionOption[];
+  purposes: SmartCompositionOption[];
+  audiences: SmartCompositionOption[];
+  styles: SmartCompositionOption[];
+};
+
+export type SmartCompositionStep = {
+  step_id: string;
+  label: string;
+  order: number;
+  percent: number;
+  status: SmartCompositionStepStatus;
+  model?: string | null;
+  message?: string | null;
+  reason?: string | null;
+  metadata: Record<string, unknown>;
+};
+
+export type SmartCompositionSelection = {
+  selected_id: string;
+  method: "llm_judge" | "rule_fallback" | "user";
+  score_signals: Record<string, number | string>;
+  judge_model?: string | null;
+  reason?: string | null;
+  fallback_reason?: string | null;
+};
+
+export type SmartCompositionResult = {
+  composition?: AutoCompositionResult | null;
+  diagnosis?: CopyDiagnosisResult | null;
+  selected_candidate?: CompositionCandidate | null;
+  selected_rewrite?: RewriteCandidate | null;
+  composition_selection?: SmartCompositionSelection | null;
+  rewrite_selection?: SmartCompositionSelection | null;
+  materials: ReferenceFragmentSummary[];
+  draft?: DraftDetail | null;
+  initial_version?: DraftVersionDetail | null;
+  final_version?: DraftVersionDetail | null;
+};
+
+export type SmartCompositionRunSummary = {
+  id: string;
+  mode: SmartCompositionMode;
+  status: SmartCompositionStatus;
+  brief: SmartCompositionBrief;
+  draft_id?: string | null;
+  initial_version_id?: string | null;
+  final_version_id?: string | null;
+  selected_candidate_id?: string | null;
+  selected_rewrite_id?: string | null;
+  error?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SmartCompositionRunDetail = SmartCompositionRunSummary & {
+  timeline: SmartCompositionStep[];
+  collection_ids: string[];
+  material_ids: string[];
+  result: SmartCompositionResult;
+  metadata: Record<string, unknown>;
+};
+
+export type SmartCompositionRunCreate = {
+  mode: SmartCompositionMode;
+  brief: SmartCompositionBrief;
+  metadata?: Record<string, unknown>;
+};
+
+export type SmartCompositionRunListResponse =
+  ListResponse<SmartCompositionRunSummary>;
+
+export type SmartCompositionBriefPrefillResponse = {
+  brief: SmartCompositionBrief;
+  confidence: number;
+  notes: string[];
+  model?: string | null;
+};
+
 export type AutoCompositionRequest = {
   brief: AutoCompositionBrief;
 };

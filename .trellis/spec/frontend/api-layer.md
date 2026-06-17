@@ -154,3 +154,69 @@ No frontend unit-test framework currently. The bar is:
 - Manual: screenshot the view against a running backend (`:8002`), confirm Network
   hits `/api/...` and CORS is OK. When backend is absent/stale, the view must
   degrade to the empty state, not crash.
+
+---
+
+## Scenario: Smart Composition Assistant API Layer
+
+### 1. Scope / Trigger
+
+- Trigger: frontend work that touches the smart composition assistant view or `/api/assistant/*` calls.
+- All calls must go through `frontend/src/lib/api.ts`; all response/request shapes live in `frontend/src/lib/types.ts`.
+
+### 2. Signatures
+
+```ts
+fetchSmartCompositionOptions(): Promise<SmartCompositionOptions>
+prefillSmartCompositionBrief(text: string): Promise<SmartCompositionBriefPrefillResponse>
+createSmartCompositionRun(body: SmartCompositionRunCreate): Promise<SmartCompositionRunDetail>
+fetchSmartCompositionRuns(): Promise<SmartCompositionRunSummary[]>
+fetchSmartCompositionRun(id: string): Promise<SmartCompositionRunDetail>
+```
+
+### 3. Contracts
+
+- The view should default to `mode: "auto"` because the product direction is one-click completion.
+- `mode: "guided"` is valid but currently stops at `waiting_for_user`; do not show that as an error.
+- Progress UI must use `run.timeline`; do not infer progress from draft ids.
+- Final preview should use `run.result.draft.current_text`.
+- Model display can use `timeline[].model`, `result.composition.model`, and `result.diagnosis.model`.
+- Selection explanation should render `result.composition_selection` and `result.rewrite_selection`.
+
+### 4. Validation & Error Matrix
+
+| Condition | Backend | Frontend handling |
+|---|---|---|
+| Invalid brief | 422 | backend detail -> toast |
+| LLM prefill parse failure | 422 | backend detail -> toast |
+| Missing workflow run | 404 | backend detail -> toast |
+| Guided waiting state | 200 `waiting_for_user` | show waiting/confirm state, not error |
+| Auto finished | 200 `finished` | show final draft preview and version ids if needed |
+
+### 5. Good/Base/Bad Cases
+
+- Good: user fills selection-first form, clicks one button, sees completed timeline and final text.
+- Good: user opens a recent workflow run from history and sees the same persisted state.
+- Base: no history exists; show empty state.
+- Bad: component fetches `/api/assistant/*` directly instead of calling `lib/api.ts`.
+- Bad: component hardcodes backend base URL.
+
+### 6. Tests Required
+
+- `npm run build` must pass.
+- When backend tests are run, `tests/test_smart_composition_api.py` must pass.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```tsx
+await fetch("http://127.0.0.1:8002/api/assistant/runs", { method: "POST" });
+```
+
+#### Correct
+
+```tsx
+const run = await createSmartCompositionRun({ mode, brief });
+setSelectedRun(run);
+```

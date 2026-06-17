@@ -555,3 +555,100 @@ accepted_compositions
 - API test for missing task/candidate behavior.
 - Static check: `python -m ruff check app tests alembic`.
 - Full backend regression: `python -m pytest`.
+
+## Scenario: Smart Composition Assistant Workflow
+
+### 1. Scope / Trigger
+
+- Trigger: backend work that changes the smart composition assistant workflow, `/api/assistant/*` endpoints, or the `smart_composition_runs` table.
+- Applies across composition generation, draft creation/versioning, copy diagnosis, rewrite selection, and workflow history.
+- This is a cross-layer contract: frontend displays the same `timeline`, `status`, model fields, draft ids, and selection reasons returned by the backend.
+
+### 2. Signatures
+
+```text
+GET  /api/assistant/options
+POST /api/assistant/brief-prefill
+POST /api/assistant/runs
+GET  /api/assistant/runs
+GET  /api/assistant/runs/{run_id}
+```
+
+Database table:
+
+```text
+smart_composition_runs
+```
+
+Important response fields:
+
+```text
+status: pending | running | waiting_for_user | finished | failed
+timeline[].status: pending | running | completed | waiting_for_user | failed
+draft_id
+initial_version_id
+final_version_id
+result.composition
+result.diagnosis
+result.composition_selection
+result.rewrite_selection
+result.draft.current_text
+```
+
+### 3. Contracts
+
+- `POST /api/assistant/runs` with `mode = "auto"` runs through final draft creation synchronously in the current MVP.
+- `mode = "guided"` generates composition candidates and stops with `status = "waiting_for_user"`; do not create a draft until confirm endpoints exist.
+- The workflow must save both an initial draft version and a final draft version for auto mode.
+- Candidate selection and rewrite selection must use rule scoring first, then an LLM judge over top candidates.
+- If the LLM judge returns invalid JSON, selects an unknown id, or fails, the backend must choose the highest rule-scored option and record `method = "rule_fallback"` plus `fallback_reason`.
+- Failed workflow runs must be persisted with `status = "failed"`, `error`, and the running step marked `failed`.
+- Workflows must follow the same DB-first, in-memory fallback convention used by knowledge and draft services in test/local unavailable DB paths.
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior |
+| --- | --- |
+| Invalid brief fields | FastAPI/Pydantic `422` |
+| Brief prefill LLM JSON invalid | `422` with detail |
+| Auto workflow LLM/service failure | run persisted as `failed`; API surfaces the exception through route handling |
+| Missing run id | `404` |
+| Guided run created | `200` with `waiting_for_user`; not a failure |
+
+### 5. Good/Base/Bad Cases
+
+- Good: auto mode returns `finished`, a real `draft_id`, `initial_version_id`, `final_version_id`, and `result.draft.current_text`.
+- Good: frontend can render progress only from `timeline` without inferring hidden backend state.
+- Base: LLM judge fails; backend still finishes using rule fallback and explains the fallback.
+- Bad: frontend calls `/compositions/accepted` and `/diagnostics/accepted-rewrite` separately for the assistant; the assistant service owns orchestration and history.
+- Bad: guided mode silently proceeds past a confirmation point.
+
+### 6. Tests Required
+
+- API test that auto mode finishes and saves both draft versions.
+- API test that guided mode returns `waiting_for_user` after candidate generation.
+- API test that brief prefill returns structured brief fields.
+- Regression test: `python -m pytest tests`.
+- Compile check: `python -m compileall app`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```text
+POST /api/compositions/auto-draft
+POST /api/compositions/accepted
+POST /api/diagnostics/copy
+POST /api/diagnostics/accepted-rewrite
+```
+
+The UI manually stitches the workflow together and loses workflow history.
+
+#### Correct
+
+```text
+POST /api/assistant/runs
+GET  /api/assistant/runs/{run_id}
+```
+
+The assistant service owns orchestration, version ids, selection reasons, and durable history.
