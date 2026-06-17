@@ -20,11 +20,16 @@ def read_task(task_id: str) -> TaskResponse:
 
 
 def _read_rq_task(task_id: str) -> TaskResponse | None:
-    try:
-        from rq.job import Job
+    job = None
+    for queue_name in ("copy_import", "recommendation"):
+        try:
+            from rq.job import Job
 
-        job = Job.fetch(task_id, connection=get_queue("copy_import").connection)
-    except Exception:
+            job = Job.fetch(task_id, connection=get_queue(queue_name).connection)
+            break
+        except Exception:
+            continue
+    if job is None:
         return None
 
     task_data = job.meta.get("task")

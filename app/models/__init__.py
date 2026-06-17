@@ -12,6 +12,7 @@ from app.models.knowledge import (
     KnowledgeTemplate,
     copy_source_collections,
 )
+from app.models.recommendation import AcceptedRecommendation
 from app.models.template import Template
 
 __all__ = [
@@ -29,6 +30,7 @@ __all__ = [
     "KnowledgeFragment",
     "KnowledgeTag",
     "KnowledgeTemplate",
+    "AcceptedRecommendation",
     "Template",
     "copy_source_collections",
 ]

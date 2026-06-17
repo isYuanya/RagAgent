@@ -19,7 +19,7 @@ def main() -> None:
             f"Current REDIS_URL: {settings.redis_url}"
         ) from exc
 
-    worker = SimpleWorker(["copy_import"], connection=redis_conn)
+    worker = SimpleWorker(["copy_import", "recommendation"], connection=redis_conn)
     worker.work()
 
 

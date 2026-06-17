@@ -394,3 +394,101 @@ DELETE /api/drafts/{draft_id} sets status = archived and preserves version histo
 ```
 
 Draft provenance must stay in first-class fields so later AI diagnosis, recommendation, and source display can use it reliably.
+
+## Scenario: Next-Sentence Recommendations
+
+### 1. Scope / Trigger
+
+- Trigger: backend work that changes Phase 4 AI next-sentence recommendation, recommendation tasks, accepted recommendation persistence, or recommendation acceptance.
+- Applies to `/api/recommendations/*`, task polling through `/api/tasks/{task_id}`, draft insertion, fragment retrieval, and the `accepted_recommendations` table.
+- The frontend owns display and selection; the backend owns recommendation generation and accept/insert consistency.
+
+### 2. Signatures
+
+```text
+POST /api/recommendations/next-sentence
+POST /api/recommendations/accepted
+GET  /api/tasks/{task_id}
+```
+
+`POST /api/recommendations/next-sentence` returns `TaskResponse`.
+
+`TaskResponse.result` is a `NextSentenceRecommendationResult` when finished.
+
+Database table:
+
+```text
+accepted_recommendations
+```
+
+### 3. Contracts
+
+- Recommendation generation is asynchronous and must expose task progress/model visibility.
+- `candidate_count` defaults to 3 and is constrained to 1-5.
+- Candidates may contain 1-2 sentences, but must remain short enough to insert as one draft item.
+- The MVP uses PostgreSQL-backed fragment structured filters and keyword search. Do not require Milvus, vector retrieval, or reranking for Phase 4 MVP.
+- The recommendation result must include reference fragment summaries so the frontend does not display raw UUIDs.
+- Unaccepted candidates are not persisted as durable records.
+- Accepted recommendations are persisted only when the user accepts a candidate.
+- Accepting a recommendation inserts a new draft item and records the accepted recommendation in one backend operation.
+- The accept endpoint validates that the task result belongs to the requested draft and that the candidate id exists.
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior |
+| --- | --- |
+| Invalid request shape | FastAPI/Pydantic `422` |
+| Missing draft | `404` |
+| Missing recommendation task | `404` |
+| Missing candidate or candidate belongs to another draft | `404` |
+| LLM failure | task status becomes `failed` with progress/error details |
+| Redis unavailable in local dev | service falls back to synchronous in-memory task execution |
+
+### 5. Good/Base/Bad Cases
+
+- Good: frontend creates a recommendation task, polls task status, displays candidates with reasons and reference fragments, then accepts one candidate.
+- Good: accepted recommendation creates a draft item with `edited_text` equal to the candidate text and metadata linking `task_id` and `candidate_id`.
+- Base: when no strongly matching fragments exist, backend can still ask the LLM to use draft context and any approved fragments available.
+- Bad: do not persist every generated candidate before recommendation quality is validated.
+- Bad: do not make the frontend insert the draft item and then separately record acceptance; this can create broken acceptance analytics.
+
+### 6. Tests Required
+
+- API test that recommendation task returns structured candidates and reference fragment summaries.
+- API test that accepting a recommendation inserts a draft item and persists the accepted recommendation.
+- API test or service test for missing task/candidate behavior.
+- Static check: `python -m ruff check app tests alembic`.
+- Full backend regression: `python -m pytest`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```text
+Frontend calls POST /api/drafts/{draft_id}/items and then separately records acceptance.
+```
+
+#### Correct
+
+```text
+Frontend calls POST /api/recommendations/accepted, and backend inserts the draft item plus acceptance record together.
+```
+
+#### Wrong
+
+```json
+{"candidate_id": "1", "reference_fragment_ids": ["uuid-only"]}
+```
+
+#### Correct
+
+```json
+{
+  "candidate_id": "stable-id",
+  "text": "Candidate text",
+  "reference_fragment_ids": ["fragment-id"],
+  "reference_fragments": [{"id": "fragment-id", "text": "fragment excerpt"}]
+}
+```
+
+Recommendation responses must be directly displayable by the frontend without showing raw ids as the primary source information.
