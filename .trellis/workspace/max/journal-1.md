@@ -171,3 +171,36 @@ Implemented backend draft workspace APIs with persistence models, version snapsh
 ### Next Steps
 
 - None - task complete
+
+
+## Session 6: Phase 4 next sentence recommendations
+
+**Date**: 2026-06-17
+**Task**: Phase 4 next sentence recommendations
+**Branch**: `master`
+
+### Summary
+
+Implemented asynchronous next-sentence recommendation APIs, accepted recommendation persistence, draft insertion on acceptance, frontend docs, backend spec updates, and regression tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `98eb71b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
