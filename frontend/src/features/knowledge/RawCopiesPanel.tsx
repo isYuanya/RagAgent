@@ -68,17 +68,33 @@ export function RawCopiesPanel({
     );
   }
 
+  function removeLocalItem(id: string) {
+    const next = items.filter((x) => x.id !== id);
+    setItems(next);
+    setSelectedId((selected) => {
+      if (selected !== id) return selected;
+      return next[0]?.id ?? null;
+    });
+  }
+
   async function handleDelete() {
     if (!deleting) return;
+    const deletingId = deleting.id;
     setDeleteBusy(true);
     try {
-      await deleteRawCopy(deleting.id);
+      await deleteRawCopy(deletingId);
       toast.success("已删除");
-      setItems((current) => current.filter((x) => x.id !== deleting.id));
-      if (selectedId === deleting.id) setSelectedId(null);
+      removeLocalItem(deletingId);
       setDeleting(null);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "删除失败");
+      const message = error instanceof Error ? error.message : "删除失败";
+      if (message === "Raw copy not found") {
+        removeLocalItem(deletingId);
+        setDeleting(null);
+        toast.info("该文案已删除");
+        return;
+      }
+      toast.error(message);
     } finally {
       setDeleteBusy(false);
     }
@@ -176,6 +192,7 @@ export function RawCopiesPanel({
             onViewFragments={() => onViewFragments(selected.id)}
             onExtractFragments={() => void handleExtractFragments(selected)}
             extractingFragments={extractingId === selected.id}
+            deleting={deleteBusy && deleting?.id === selected.id}
             onDelete={() => setDeleting(selected)}
           />
         ) : (

@@ -11,6 +11,7 @@ export function RawCopyDetail({
   onViewFragments,
   onExtractFragments,
   extractingFragments,
+  deleting,
   onDelete
 }: {
   rawCopy: RawCopySummary;
@@ -18,6 +19,7 @@ export function RawCopyDetail({
   onViewFragments: () => void;
   onExtractFragments: () => void;
   extractingFragments: boolean;
+  deleting?: boolean;
   onDelete: () => void;
 }) {
   const analysis = rawCopy.reviewed_analysis ?? rawCopy.auto_analysis ?? null;
@@ -45,7 +47,14 @@ export function RawCopyDetail({
           <Button size="sm" variant="outline" onClick={onEditCollections}>
             <FolderPlus /> 设置集合
           </Button>
-          <Button size="sm" variant="ghost" onClick={onDelete} aria-label="删除">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onDelete}
+            disabled={deleting}
+            aria-label="删除"
+            title={deleting ? "正在删除" : "删除"}
+          >
             <Trash2 />
           </Button>
         </div>

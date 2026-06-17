@@ -104,8 +104,11 @@ def update_raw_copy(raw_copy_id: str, payload: RawCopyUpdate):
 
 @router.delete("/raw-copies/{raw_copy_id}", status_code=204)
 def delete_raw_copy(raw_copy_id: str):
-    if not knowledge.delete_raw_copy(raw_copy_id):
+    result = knowledge.delete_raw_copy(raw_copy_id)
+    if result == "not_found":
         raise HTTPException(status_code=404, detail="Raw copy not found")
+    if result == "unavailable":
+        raise HTTPException(status_code=503, detail="Database is unavailable; raw copy was not deleted")
 
 
 @router.get("/analyses", response_model=AnalysisListResponse)

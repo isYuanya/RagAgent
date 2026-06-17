@@ -47,6 +47,11 @@ knowledge_templates
 - `raw-copies` also accepts optional `collection_id`.
 - `fragments` also accepts optional `source_copy_id`, `fragment_role`, `position`, and `industry`.
 - Delete endpoints return `204` and use soft-delete semantics where the backing table has `is_deleted`.
+- `DELETE /api/knowledge/raw-copies/{id}` deletes the underlying copy asset record, not only
+  the knowledge service's process-local view. PostgreSQL-backed raw copies are soft-deleted by
+  setting `copy_sources.metadata_json.deleted = true`; Redis-only records are removed from Redis.
+- If a PostgreSQL-backed raw copy cannot be deleted because the database is unavailable, return
+  `503`; do not return `204` from an in-memory/cache-only fallback.
 - Templates accept optional source traceability:
 
 ```json
@@ -64,8 +69,8 @@ knowledge_templates
 | Missing resource by ID | `404` |
 | Delete existing resource | `204` |
 | Deleted resource fetched again | `404` |
+| Database unavailable while deleting a PostgreSQL-backed raw copy through `/api/knowledge/raw-copies/{id}` | `503` and the cached copy is not treated as durably deleted |
 | Database unavailable in local dev | Service falls back to in-memory store where implemented |
-| Database unavailable while deleting a PostgreSQL-backed raw copy | `503` and the cached copy is not treated as durably deleted |
 
 ### 5. Good/Base/Bad Cases
 
@@ -79,6 +84,7 @@ knowledge_templates
 ### 6. Tests Required
 
 - API test for collection CRUD and raw copy collection assignment.
+- API/service regression test that raw copy deletion does not fall back to cache-only deletion for PostgreSQL-backed copy assets.
 - API test for template CRUD with `source`.
 - API test for fragment CRUD and filters by `source_copy_id`, `fragment_role`, `position`, or `industry`.
 - API test that CSV import populates raw copy and analysis libraries.

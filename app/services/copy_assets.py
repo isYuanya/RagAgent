@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from redis import Redis
 from redis.exceptions import RedisError
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import settings
@@ -164,6 +164,35 @@ def delete_copy_asset(asset_id: str) -> Literal["deleted", "not_found", "conflic
         return "unavailable"
     if asset.status != "pending_review":
         return "conflict"
+    _copy_assets.pop(asset_id, None)
+    return "deleted"
+
+
+def delete_copy_asset_record(asset_id: str) -> Literal["deleted", "not_found", "unavailable"]:
+    db_result = _soft_delete_db_asset(asset_id)
+    if db_result == "deleted":
+        _delete_redis_asset(asset_id)
+        _copy_assets.pop(asset_id, None)
+        return "deleted"
+    if db_result == "not_found":
+        _delete_redis_asset(asset_id)
+        if _copy_assets.pop(asset_id, None) is not None:
+            return "deleted"
+        return "not_found"
+
+    redis_asset = _get_redis_asset(asset_id)
+    if redis_asset is not None:
+        if _asset_requires_db_delete(redis_asset):
+            return "unavailable"
+        _delete_redis_asset(asset_id)
+        _copy_assets.pop(asset_id, None)
+        return "deleted"
+
+    asset = _copy_assets.get(asset_id)
+    if asset is None:
+        return "not_found"
+    if _asset_requires_db_delete(asset):
+        return "unavailable"
     _copy_assets.pop(asset_id, None)
     return "deleted"
 
@@ -396,6 +425,33 @@ def _delete_db_asset(asset_id: str) -> Literal["deleted", "not_found", "conflict
         metadata["deleted"] = True
         source.metadata_json = metadata
         db.commit()
+        return "deleted"
+    except SQLAlchemyError:
+        _mark_db_available(False)
+        db.rollback()
+        return None
+    finally:
+        db.close()
+
+
+def _soft_delete_db_asset(asset_id: str) -> Literal["deleted", "not_found"] | None:
+    if _persistent_backends_disabled() or _db_available is False:
+        return None
+    db = SessionLocal()
+    try:
+        source = db.get(CopySource, asset_id)
+        if source is None or _is_deleted_metadata(source.metadata_json or {}):
+            return "not_found"
+        metadata = dict(source.metadata_json or {})
+        metadata["deleted"] = True
+        source.metadata_json = metadata
+        db.execute(
+            delete(copy_source_collections).where(
+                copy_source_collections.c.copy_source_id == asset_id
+            )
+        )
+        db.commit()
+        _mark_db_available(True)
         return "deleted"
     except SQLAlchemyError:
         _mark_db_available(False)

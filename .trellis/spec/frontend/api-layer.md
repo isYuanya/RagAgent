@@ -125,6 +125,7 @@ Validation and error behavior:
 | Invalid/missing field | 422 (Pydantic) | `detail` → `toast.error` |
 | Resource not found | 404 | `detail` → `toast.error` (except `fetchTask` → `null`) |
 | Soft delete success | 204 (no body) | resolve void; remove row from local state |
+| Repeated delete after a row was already removed | 404 | the owning view treats it as already deleted, removes the local row, and avoids surfacing raw backend English |
 | LLM config/parse failure (copy) | 502 / 503 | `detail` → `toast.error` |
 
 ---

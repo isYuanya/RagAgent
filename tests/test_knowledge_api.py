@@ -1,7 +1,8 @@
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.services.copy_assets import reset_copy_asset_store
+from app.schemas.copy import CopyAssetSummary
+from app.services.copy_assets import delete_copy_asset_record, reset_copy_asset_store
 from app.services.knowledge import reset_knowledge_store
 
 
@@ -59,6 +60,30 @@ def test_collection_and_raw_copy_crud() -> None:
     delete_response = client.delete(f"/api/knowledge/raw-copies/{raw_payload['id']}")
     assert delete_response.status_code == 204
     assert client.get(f"/api/knowledge/raw-copies/{raw_payload['id']}").status_code == 404
+
+
+def test_db_backed_raw_copy_delete_does_not_fall_back_to_cache_only(monkeypatch) -> None:
+    asset = CopyAssetSummary(
+        id="33333333-3333-3333-3333-333333333333",
+        source_text="db backed cached raw copy",
+        status="approved",
+        storage_backend="postgres",
+    )
+    monkeypatch.setattr("app.services.copy_assets._soft_delete_db_asset", lambda asset_id: None)
+    monkeypatch.setattr("app.services.copy_assets._get_redis_asset", lambda asset_id: asset)
+
+    result = delete_copy_asset_record(asset.id)
+
+    assert result == "unavailable"
+
+
+def test_delete_raw_copy_returns_503_when_db_delete_is_unavailable(monkeypatch) -> None:
+    monkeypatch.setattr("app.services.knowledge.delete_raw_copy", lambda raw_copy_id: "unavailable")
+
+    response = client.delete("/api/knowledge/raw-copies/33333333-3333-3333-3333-333333333333")
+
+    assert response.status_code == 503
+    assert "Database is unavailable" in response.json()["detail"]
 
 
 def test_template_crud_with_source_reference() -> None:

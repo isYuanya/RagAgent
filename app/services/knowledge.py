@@ -37,7 +37,12 @@ from app.schemas.knowledge import (
     TemplateItem,
     TemplateUpdate,
 )
-from app.services.copy_assets import create_copy_asset, get_copy_asset, list_copy_assets
+from app.services.copy_assets import (
+    create_copy_asset,
+    delete_copy_asset_record,
+    get_copy_asset,
+    list_copy_assets,
+)
 
 
 T = TypeVar("T")
@@ -182,11 +187,11 @@ def update_raw_copy(raw_copy_id: str, payload: RawCopyUpdate) -> RawCopySummary 
     return _to_raw_summary(raw_copy_id)
 
 
-def delete_raw_copy(raw_copy_id: str) -> bool:
-    if get_copy_asset(raw_copy_id) is None:
-        return False
-    _store.raw_deleted.add(raw_copy_id)
-    return True
+def delete_raw_copy(raw_copy_id: str) -> str:
+    result = delete_copy_asset_record(raw_copy_id)
+    if result == "deleted":
+        _store.raw_deleted.add(raw_copy_id)
+    return result
 
 
 def list_analyses(page: int = 1, page_size: int = 20) -> AnalysisListResponse:
