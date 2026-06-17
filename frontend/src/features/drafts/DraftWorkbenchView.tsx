@@ -9,6 +9,7 @@ import {
   Plus,
   Save,
   Search,
+  Sparkles,
   Trash2
 } from "lucide-react";
 import { toast } from "sonner";
@@ -29,15 +30,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDialog } from "@/features/shared/ConfirmDialog";
 import { EmptyState } from "@/features/shared/EmptyState";
 import {
+  acceptRecommendation,
   addDraftItem,
   archiveDraft,
   createDraft,
   createDraftVersion,
+  createNextSentenceRecommendation,
   deleteDraftItem,
   fetchDraft,
   fetchDraftVersions,
   fetchDrafts,
   fetchFragments,
+  fetchTask,
   reorderDraftItems,
   updateDraft,
   updateDraftItem
@@ -50,7 +54,11 @@ import type {
   DraftSummary,
   DraftVersionSummary,
   FragmentFilters,
-  KnowledgeFragment
+  KnowledgeFragment,
+  NextSentenceRecommendationResult,
+  RecommendationCandidate,
+  ReferenceFragmentSummary,
+  TaskResponse
 } from "@/lib/types";
 
 const STATUS_LABELS: Record<DraftStatus, string> = {
@@ -793,6 +801,7 @@ function DraftSidePanel({
 }) {
   return (
     <div className="flex h-full flex-col">
+      <RecommendationPanel draft={draft} onDetailChange={onDetailChange} />
       <FragmentPicker draft={draft} onDetailChange={onDetailChange} />
       <div className="min-h-[220px] border-t border-border p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
@@ -841,6 +850,228 @@ function DraftSidePanel({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function RecommendationPanel({
+  draft,
+  onDetailChange
+}: {
+  draft: DraftDetail;
+  onDetailChange: (draft: DraftDetail) => void;
+}) {
+  const [query, setQuery] = React.useState("");
+  const [candidateCount, setCandidateCount] = React.useState("3");
+  const [task, setTask] = React.useState<TaskResponse | null>(null);
+  const [result, setResult] =
+    React.useState<NextSentenceRecommendationResult | null>(null);
+  const [creating, setCreating] = React.useState(false);
+  const [acceptingId, setAcceptingId] = React.useState<string | null>(null);
+
+  const isRunning = task ? ["queued", "running"].includes(task.status) : false;
+
+  React.useEffect(() => {
+    setTask(null);
+    setResult(null);
+    setQuery("");
+  }, [draft.id]);
+
+  React.useEffect(() => {
+    if (!task || !["queued", "running"].includes(task.status)) return;
+    const timer = window.setInterval(async () => {
+      const next = await fetchTask(task.task_id);
+      if (!next) return;
+      setTask(next);
+      if (next.status === "finished") {
+        const parsed = parseRecommendationResult(next);
+        setResult(parsed);
+        if (parsed) toast.success("下一句推荐已生成");
+      }
+      if (next.status === "failed") {
+        toast.error(next.error ?? "下一句推荐失败");
+      }
+    }, 1200);
+    return () => window.clearInterval(timer);
+  }, [task?.task_id, task?.status]);
+
+  async function handleCreate() {
+    setCreating(true);
+    setResult(null);
+    try {
+      const payload = await createNextSentenceRecommendation({
+        draft_id: draft.id,
+        candidate_count: Number(candidateCount),
+        cursor_item_id: null,
+        q: query.trim() || null,
+        metadata: {}
+      });
+      setTask(payload);
+      const parsed = parseRecommendationResult(payload);
+      if (payload.status === "finished" && parsed) {
+        setResult(parsed);
+        toast.success("下一句推荐已生成");
+      } else {
+        toast.message(payload.progress?.current_message ?? "推荐任务已创建");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "创建推荐任务失败");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleAccept(candidate: RecommendationCandidate) {
+    if (!task) return;
+    setAcceptingId(candidate.candidate_id);
+    try {
+      const response = await acceptRecommendation({
+        draft_id: draft.id,
+        task_id: task.task_id,
+        candidate_id: candidate.candidate_id,
+        order_index: null,
+        metadata: {}
+      });
+      onDetailChange(response.draft);
+      toast.success("推荐已加入草稿");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "采纳推荐失败");
+    } finally {
+      setAcceptingId(null);
+    }
+  }
+
+  return (
+    <div className="border-b border-border p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="text-sm font-semibold">AI 下一句推荐</div>
+        <Button
+          size="sm"
+          onClick={handleCreate}
+          disabled={creating || isRunning || draft.status === "archived"}
+        >
+          {creating || isRunning ? (
+            <Loader2 className="animate-spin" />
+          ) : (
+            <Sparkles />
+          )}
+          推荐
+        </Button>
+      </div>
+      <div className="grid grid-cols-[1fr_86px] gap-2">
+        <Input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="可选检索关键词"
+        />
+        <Select value={candidateCount} onValueChange={setCandidateCount}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {[1, 2, 3, 4, 5].map((count) => (
+              <SelectItem key={count} value={String(count)}>
+                {count} 条
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      {task?.progress ? (
+        <div className="mt-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+          {task.progress.current_message ?? task.progress.phase}
+          {task.progress.model ? ` · ${task.progress.model}` : ""}
+        </div>
+      ) : null}
+      {result ? (
+        <div className="mt-3 space-y-3">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <Badge variant="outline">下一功能：{result.next_function}</Badge>
+            {result.model ? <span>{result.model}</span> : null}
+          </div>
+          <div className="max-h-[360px] space-y-2 overflow-y-auto pr-1">
+            {result.candidates.map((candidate) => (
+              <RecommendationCandidateCard
+                key={candidate.candidate_id}
+                candidate={candidate}
+                references={result.reference_fragments}
+                accepting={acceptingId === candidate.candidate_id}
+                onAccept={() => handleAccept(candidate)}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function RecommendationCandidateCard({
+  candidate,
+  references,
+  accepting,
+  onAccept
+}: {
+  candidate: RecommendationCandidate;
+  references: ReferenceFragmentSummary[];
+  accepting: boolean;
+  onAccept: () => void;
+}) {
+  const candidateReferences =
+    candidate.reference_fragments.length > 0
+      ? candidate.reference_fragments
+      : references.filter((item) =>
+          candidate.reference_fragment_ids.includes(item.id)
+        );
+
+  return (
+    <div className="rounded-lg border border-border bg-background p-3">
+      <div className="whitespace-pre-wrap text-sm leading-6">{candidate.text}</div>
+      <div className="mt-2 flex flex-wrap gap-1 text-xs text-muted-foreground">
+        <span>{candidate.function}</span>
+        {candidate.tone ? <span>· {candidate.tone}</span> : null}
+        <span>· 建议位置 {candidate.suggested_order_index + 1}</span>
+      </div>
+      {candidate.reason ? (
+        <div className="mt-2 rounded-md bg-muted/30 p-2 text-xs leading-5 text-muted-foreground">
+          {candidate.reason}
+        </div>
+      ) : null}
+      {candidate.risk_warnings.length > 0 ? (
+        <div className="mt-2 space-y-1">
+          {candidate.risk_warnings.map((warning, index) => (
+            <Badge key={index} variant="destructive">
+              {warning.level}: {warning.message}
+            </Badge>
+          ))}
+        </div>
+      ) : null}
+      {candidateReferences.length > 0 ? (
+        <details className="mt-2 text-xs text-muted-foreground">
+          <summary className="cursor-pointer">参考片段</summary>
+          <div className="mt-2 space-y-2">
+            {candidateReferences.map((item) => (
+              <div key={item.id} className="rounded-md bg-muted/30 p-2 leading-5">
+                <div className="text-foreground">{item.text}</div>
+                <div className="mt-1">
+                  {[item.role, item.position, item.source_display]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </div>
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : null}
+      <Button
+        size="sm"
+        className="mt-3 w-full"
+        onClick={onAccept}
+        disabled={accepting}
+      >
+        {accepting ? <Loader2 className="animate-spin" /> : <Plus />}
+        采纳到草稿
+      </Button>
     </div>
   );
 }
@@ -1087,5 +1318,30 @@ function toSummary(draft: DraftDetail): DraftSummary {
     current_text: draft.current_text,
     item_count: draft.item_count,
     metadata: draft.metadata
+  };
+}
+
+function parseRecommendationResult(
+  task: TaskResponse
+): NextSentenceRecommendationResult | null {
+  const result = task.result;
+  if (!result || typeof result !== "object") return null;
+  if (
+    typeof result.draft_id !== "string" ||
+    typeof result.current_text !== "string" ||
+    typeof result.next_function !== "string" ||
+    !Array.isArray(result.candidates)
+  ) {
+    return null;
+  }
+  return {
+    draft_id: result.draft_id,
+    current_text: result.current_text,
+    next_function: result.next_function,
+    model: typeof result.model === "string" ? result.model : null,
+    candidates: result.candidates as RecommendationCandidate[],
+    reference_fragments: Array.isArray(result.reference_fragments)
+      ? (result.reference_fragments as ReferenceFragmentSummary[])
+      : []
   };
 }

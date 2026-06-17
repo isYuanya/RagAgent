@@ -69,6 +69,53 @@ Shared helpers `parseJson`, `writeJson`, `deleteResource` already exist — reus
 
 **Exception**: `fetchTask` returns `null` on 404 (polling), instead of throwing.
 
+## Async task endpoints
+
+Some backend actions create a `TaskResponse` and finish later, then expose their
+typed result through `GET /api/tasks/{task_id}`. Frontend code should keep the
+endpoint-specific request/accept functions in `lib/api.ts`, reuse `fetchTask`
+for polling, and parse `task.result` in the feature component before rendering.
+
+Current task-backed contracts:
+
+| Feature | Create endpoint | Result consumer | Follow-up endpoint |
+|---|---|---|---|
+| Copy import | `POST /api/copy/import` | import progress panel | refresh assets |
+| Draft next sentence | `POST /api/recommendations/next-sentence` | draft recommendation panel | `POST /api/recommendations/accepted` |
+
+### Draft next-sentence recommendation
+
+Request type mirrors backend snake_case fields:
+
+```ts
+type NextSentenceRecommendationRequest = {
+  draft_id: string;
+  candidate_count?: number; // 1..5
+  cursor_item_id?: string | null;
+  q?: string | null;
+  metadata?: Record<string, unknown>;
+};
+```
+
+The create function returns `TaskResponse`, not the final candidate list:
+
+```ts
+createNextSentenceRecommendation(body): Promise<TaskResponse>
+```
+
+When `TaskResponse.status === "finished"`, parse `task.result` as
+`NextSentenceRecommendationResult`. The accept endpoint returns the updated
+`DraftDetail`, and the UI must replace local draft state with `response.draft`.
+
+Validation and error behavior:
+
+| Condition | Backend | Frontend handling |
+|---|---|---|
+| `candidate_count` outside 1..5 | 422 | backend `detail` -> toast |
+| draft missing | 404 | backend `detail` -> toast |
+| recommendation task still running when accepting | 404 | backend `detail` -> toast |
+| accepted successfully | 200 | replace draft with returned `draft` |
+
 ---
 
 ## Validation & Error Matrix (backend-driven)

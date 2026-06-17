@@ -328,6 +328,72 @@ export type DraftVersionDetail = DraftVersionSummary & {
   items: DraftItemSnapshot[];
 };
 
+export type ReferenceFragmentSummary = {
+  id: string;
+  text: string;
+  role?: string | null;
+  position?: string | null;
+  source_copy_id?: string | null;
+  source_display?: string | null;
+};
+
+export type RecommendationCandidate = {
+  candidate_id: string;
+  text: string;
+  function: string;
+  reason: string;
+  tone: string;
+  suggested_order_index: number;
+  risk_warnings: RiskWarning[];
+  reference_fragment_ids: string[];
+  reference_fragments: ReferenceFragmentSummary[];
+};
+
+export type NextSentenceRecommendationResult = {
+  draft_id: string;
+  current_text: string;
+  next_function: string;
+  model?: string | null;
+  candidates: RecommendationCandidate[];
+  reference_fragments: ReferenceFragmentSummary[];
+};
+
+export type NextSentenceRecommendationRequest = {
+  draft_id: string;
+  candidate_count?: number;
+  cursor_item_id?: string | null;
+  q?: string | null;
+  metadata?: Record<string, unknown>;
+};
+
+export type AcceptRecommendationRequest = {
+  draft_id: string;
+  task_id: string;
+  candidate_id: string;
+  order_index?: number | null;
+  metadata?: Record<string, unknown>;
+};
+
+export type AcceptedRecommendationItem = {
+  id: string;
+  draft_id: string;
+  task_id: string;
+  candidate_id: string;
+  inserted_draft_item_id: string;
+  candidate_text: string;
+  function?: string | null;
+  tone?: string | null;
+  reason?: string | null;
+  model?: string | null;
+  reference_fragment_ids: string[];
+  metadata: Record<string, unknown>;
+};
+
+export type AcceptRecommendationResponse = {
+  accepted: AcceptedRecommendationItem;
+  draft: DraftDetail;
+};
+
 export const emptyAnalysis: Analysis = {
   topic: "",
   target_user: "",

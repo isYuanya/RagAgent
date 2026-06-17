@@ -29,6 +29,9 @@ import type {
   DraftUpdate,
   DraftVersionDetail,
   DraftVersionSummary,
+  AcceptRecommendationRequest,
+  AcceptRecommendationResponse,
+  NextSentenceRecommendationRequest,
   ListResponse,
   RawCopySummary,
   SystemStatusResponse,
@@ -484,4 +487,30 @@ export async function fetchDraftVersion(
   const response = await fetch(`${draftsBase}/${draftId}/versions/${versionId}`);
   if (!response.ok) throw new Error("加载版本详情失败");
   return (await response.json()) as DraftVersionDetail;
+}
+
+// ---- Recommendations ----
+
+const recommendationsBase = `${apiBase}/api/recommendations`;
+
+export function createNextSentenceRecommendation(
+  body: NextSentenceRecommendationRequest
+): Promise<TaskResponse> {
+  return writeJson(
+    `${recommendationsBase}/next-sentence`,
+    "POST",
+    body,
+    "创建下一句推荐任务失败"
+  );
+}
+
+export function acceptRecommendation(
+  body: AcceptRecommendationRequest
+): Promise<AcceptRecommendationResponse> {
+  return writeJson(
+    `${recommendationsBase}/accepted`,
+    "POST",
+    body,
+    "采纳推荐失败"
+  );
 }
