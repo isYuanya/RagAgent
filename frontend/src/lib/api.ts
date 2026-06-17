@@ -18,6 +18,17 @@ import type {
   KnowledgeTemplate,
   KnowledgeTemplateCreate,
   FragmentFilters,
+  DraftCreate,
+  DraftDetail,
+  DraftItemCreate,
+  DraftItemReorder,
+  DraftItemUpdate,
+  DraftListResponse,
+  DraftStatus,
+  DraftSummary,
+  DraftUpdate,
+  DraftVersionDetail,
+  DraftVersionSummary,
   ListResponse,
   RawCopySummary,
   SystemStatusResponse,
@@ -360,4 +371,117 @@ export function updateFragment(
 
 export function deleteFragment(id: string): Promise<void> {
   return deleteResource(`${knowledgeBase}/fragments/${id}`, "删除片段失败");
+}
+
+// ---- Draft workbench ----
+
+const draftsBase = `${apiBase}/api/drafts`;
+
+export async function fetchDrafts(
+  status: DraftStatus | "all" = "draft"
+): Promise<DraftSummary[]> {
+  if (status === "all") {
+    const groups = await Promise.all([
+      fetchDrafts("draft"),
+      fetchDrafts("ready"),
+      fetchDrafts("archived")
+    ]);
+    return groups.flat();
+  }
+
+  const params = new URLSearchParams({ page: "1", page_size: "100" });
+  params.set("status", status);
+  const response = await fetch(`${draftsBase}?${params}`);
+  if (!response.ok) throw new Error("加载草稿失败");
+  const payload = (await response.json()) as DraftListResponse;
+  return payload.items;
+}
+
+export function createDraft(body: DraftCreate): Promise<DraftDetail> {
+  return writeJson(`${draftsBase}`, "POST", body, "创建草稿失败");
+}
+
+export async function fetchDraft(id: string): Promise<DraftDetail> {
+  const response = await fetch(`${draftsBase}/${id}`);
+  if (!response.ok) throw new Error("加载草稿详情失败");
+  return (await response.json()) as DraftDetail;
+}
+
+export function updateDraft(
+  id: string,
+  body: DraftUpdate
+): Promise<DraftDetail> {
+  return writeJson(`${draftsBase}/${id}`, "PATCH", body, "保存草稿失败");
+}
+
+export function archiveDraft(id: string): Promise<void> {
+  return deleteResource(`${draftsBase}/${id}`, "归档草稿失败");
+}
+
+export function addDraftItem(
+  draftId: string,
+  body: DraftItemCreate
+): Promise<DraftDetail> {
+  return writeJson(`${draftsBase}/${draftId}/items`, "POST", body, "添加片段失败");
+}
+
+export function updateDraftItem(
+  draftId: string,
+  itemId: string,
+  body: DraftItemUpdate
+): Promise<DraftDetail> {
+  return writeJson(
+    `${draftsBase}/${draftId}/items/${itemId}`,
+    "PATCH",
+    body,
+    "保存草稿段落失败"
+  );
+}
+
+export function deleteDraftItem(draftId: string, itemId: string): Promise<void> {
+  return deleteResource(
+    `${draftsBase}/${draftId}/items/${itemId}`,
+    "删除草稿段落失败"
+  );
+}
+
+export function reorderDraftItems(
+  draftId: string,
+  items: DraftItemReorder[]
+): Promise<DraftDetail> {
+  return writeJson(
+    `${draftsBase}/${draftId}/items/reorder`,
+    "PATCH",
+    { items },
+    "调整草稿顺序失败"
+  );
+}
+
+export function createDraftVersion(
+  draftId: string,
+  label?: string
+): Promise<DraftVersionDetail> {
+  return writeJson(
+    `${draftsBase}/${draftId}/versions`,
+    "POST",
+    { label: label?.trim() || null, metadata: {} },
+    "保存版本失败"
+  );
+}
+
+export async function fetchDraftVersions(
+  draftId: string
+): Promise<DraftVersionSummary[]> {
+  const response = await fetch(`${draftsBase}/${draftId}/versions`);
+  if (!response.ok) throw new Error("加载版本失败");
+  return (await response.json()) as DraftVersionSummary[];
+}
+
+export async function fetchDraftVersion(
+  draftId: string,
+  versionId: string
+): Promise<DraftVersionDetail> {
+  const response = await fetch(`${draftsBase}/${draftId}/versions/${versionId}`);
+  if (!response.ok) throw new Error("加载版本详情失败");
+  return (await response.json()) as DraftVersionDetail;
 }

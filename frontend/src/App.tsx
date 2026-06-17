@@ -7,6 +7,7 @@ import { TextImportDialog } from "@/features/TextImportDialog";
 import { ImportProgress, ImportErrors } from "@/features/ImportProgress";
 import { AssetList } from "@/features/AssetList";
 import { ReviewPanel } from "@/features/ReviewPanel";
+import { DraftWorkbenchView } from "@/features/drafts/DraftWorkbenchView";
 import { KnowledgeView } from "@/features/knowledge/KnowledgeView";
 import { SystemStatusBadge } from "@/features/system/SystemStatusBadge";
 import { SystemStatusView } from "@/features/system/SystemStatusView";
@@ -308,6 +309,8 @@ export function App() {
           onAutoRefreshChange={setAutoRefreshStatus}
           onRefresh={() => void loadSystemStatus()}
         />
+      ) : view === "drafts" ? (
+        <DraftWorkbenchView headerAction={statusBadge} />
       ) : view === "knowledge" ? (
         <KnowledgeView headerAction={statusBadge} />
       ) : (

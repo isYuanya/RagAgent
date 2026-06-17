@@ -244,6 +244,90 @@ export type FragmentExtractionBatchResponse = {
   failed_count: number;
 };
 
+export type DraftStatus = "draft" | "ready" | "archived";
+
+export type DraftItem = {
+  id: string;
+  draft_id: string;
+  source_fragment_id?: string | null;
+  source_copy_id?: string | null;
+  order_index: number;
+  original_fragment_text?: string | null;
+  edited_text: string;
+  role?: string | null;
+  position?: string | null;
+  metadata: Record<string, unknown>;
+};
+
+export type DraftSummary = {
+  id: string;
+  title: string;
+  goal?: string | null;
+  audience?: string | null;
+  platform?: string | null;
+  purpose?: string | null;
+  status: DraftStatus;
+  current_text: string;
+  item_count: number;
+  metadata: Record<string, unknown>;
+};
+
+export type DraftDetail = DraftSummary & {
+  items: DraftItem[];
+};
+
+export type DraftListResponse = ListResponse<DraftSummary>;
+
+export type DraftCreate = {
+  title: string;
+  goal?: string | null;
+  audience?: string | null;
+  platform?: string | null;
+  purpose?: string | null;
+  metadata?: Record<string, unknown>;
+};
+
+export type DraftUpdate = Partial<DraftCreate> & {
+  status?: DraftStatus;
+};
+
+export type DraftItemCreate = {
+  source_fragment_id?: string | null;
+  edited_text?: string | null;
+  role?: string | null;
+  position?: string | null;
+  order_index?: number | null;
+  metadata?: Record<string, unknown>;
+};
+
+export type DraftItemUpdate = {
+  edited_text?: string | null;
+  role?: string | null;
+  position?: string | null;
+  metadata?: Record<string, unknown> | null;
+};
+
+export type DraftItemReorder = {
+  item_id: string;
+  order_index: number;
+};
+
+export type DraftVersionSummary = {
+  id: string;
+  draft_id: string;
+  version_number: number;
+  label?: string | null;
+  current_text: string;
+  item_count: number;
+  metadata: Record<string, unknown>;
+};
+
+export type DraftItemSnapshot = Omit<DraftItem, "draft_id">;
+
+export type DraftVersionDetail = DraftVersionSummary & {
+  items: DraftItemSnapshot[];
+};
+
 export const emptyAnalysis: Analysis = {
   topic: "",
   target_user: "",
