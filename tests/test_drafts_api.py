@@ -21,6 +21,26 @@ class _FragmentLLM:
         )
 
 
+class _VideoExportLLM:
+    model = "fake-video-export-model"
+
+    def complete(self, prompt: str) -> str:
+        return (
+            '{"title":"护肤顺序","title_break":"护肤\\n顺序",'
+            '"description":"先检查护肤顺序，再判断产品是否真的不适合。",'
+            '"script":"如果你总觉得护肤没效果，先别急着换产品。\\n\\n很多时候问题不是产品，而是使用顺序。",'
+            '"tts_script":"如果你总觉得护肤没效果，先别急着换产品。很多时候问题不是产品，而是使用顺序。",'
+            '"hashtags":["护肤","护肤顺序"]}'
+        )
+
+
+class _InvalidVideoExportLLM:
+    model = "fake-video-export-model"
+
+    def complete(self, prompt: str) -> str:
+        return '{"title":"这是一个超过十六个字的视频标题会失败","hashtags":[]}'
+
+
 def setup_function() -> None:
     reset_copy_asset_store()
     reset_knowledge_store()
@@ -227,3 +247,90 @@ def test_approve_empty_draft_fails() -> None:
     draft = client.post("/api/drafts", json={"title": "Empty draft"}).json()
     response = client.post(f"/api/drafts/{draft['id']}/approve")
     assert response.status_code == 409
+
+
+def test_draft_video_export_task_persists_history(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.services.draft_video_export.get_llm_client",
+        lambda: _VideoExportLLM(),
+    )
+    monkeypatch.setattr(
+        "app.api.routes.drafts.enqueue_draft_video_export",
+        lambda draft_id: __import__(
+            "app.services.draft_video_export_jobs",
+            fromlist=["run_draft_video_export_task"],
+        ).run_draft_video_export_task({"draft_id": draft_id}),
+    )
+    draft = client.post("/api/drafts", json={"title": "视频草稿"}).json()
+    draft_id = draft["id"]
+    client.post(
+        f"/api/drafts/{draft_id}/items",
+        json={"edited_text": "如果你总觉得护肤没效果，先别急着换产品。"},
+    )
+
+    response = client.post(f"/api/drafts/{draft_id}/video-exports")
+    assert response.status_code == 200
+    task_payload = response.json()
+    assert task_payload["status"] == "finished"
+    assert task_payload["progress"]["phase"] == "finished"
+    assert task_payload["progress"]["model"] == "fake-video-export-model"
+
+    result = task_payload["result"]
+    assert result["draft_id"] == draft_id
+    assert result["model"] == "fake-video-export-model"
+    assert result["result"] == {
+        "title": "护肤顺序",
+        "title_break": "护肤\n顺序",
+        "description": "先检查护肤顺序，再判断产品是否真的不适合。",
+        "script": "如果你总觉得护肤没效果，先别急着换产品。\n\n很多时候问题不是产品，而是使用顺序。",
+        "tts_script": "如果你总觉得护肤没效果，先别急着换产品。很多时候问题不是产品，而是使用顺序。",
+        "hashtags": ["护肤", "护肤顺序"],
+    }
+
+    history = client.get(f"/api/drafts/{draft_id}/video-exports")
+    assert history.status_code == 200
+    history_payload = history.json()
+    assert history_payload["total"] == 1
+    assert history_payload["items"][0]["id"] == result["id"]
+    assert history_payload["items"][0]["result"]["title"] == "护肤顺序"
+
+
+def test_draft_video_export_empty_draft_fails(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.api.routes.drafts.enqueue_draft_video_export",
+        lambda draft_id: __import__(
+            "app.services.draft_video_export_jobs",
+            fromlist=["run_draft_video_export_task"],
+        ).run_draft_video_export_task({"draft_id": draft_id}),
+    )
+    draft = client.post("/api/drafts", json={"title": "空草稿"}).json()
+
+    response = client.post(f"/api/drafts/{draft['id']}/video-exports")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "failed"
+    assert "Draft has no text" in payload["error"]
+
+
+def test_draft_video_export_invalid_llm_json_fails(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.services.draft_video_export.get_llm_client",
+        lambda: _InvalidVideoExportLLM(),
+    )
+    monkeypatch.setattr(
+        "app.api.routes.drafts.enqueue_draft_video_export",
+        lambda draft_id: __import__(
+            "app.services.draft_video_export_jobs",
+            fromlist=["run_draft_video_export_task"],
+        ).run_draft_video_export_task({"draft_id": draft_id}),
+    )
+    draft = client.post("/api/drafts", json={"title": "格式失败草稿"}).json()
+    draft_id = draft["id"]
+    client.post(f"/api/drafts/{draft_id}/items", json={"edited_text": "测试正文"})
+
+    response = client.post(f"/api/drafts/{draft_id}/video-exports")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "failed"
+    assert "invalid video export JSON" in payload["error"]
+    assert client.get(f"/api/drafts/{draft_id}/video-exports").json()["total"] == 0

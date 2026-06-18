@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.schemas.copy import CopyAssetSummary
 from app.schemas.knowledge import FragmentExtractionResult
@@ -131,3 +131,47 @@ class DraftApprovalResponse(BaseModel):
     draft: DraftDetail
     raw_copy: CopyAssetSummary
     fragment_extraction: FragmentExtractionResult
+
+
+class DraftVideoExportPayload(BaseModel):
+    title: str = Field(min_length=2, max_length=16)
+    title_break: str = Field(min_length=2, max_length=40)
+    description: str = Field(min_length=10, max_length=100)
+    script: str = Field(min_length=1)
+    tts_script: str = Field(min_length=1)
+    hashtags: list[str] = Field(default_factory=list, max_length=5)
+
+    @field_validator("title", "title_break", "description", "script", "tts_script")
+    @classmethod
+    def _strip_text(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("hashtags")
+    @classmethod
+    def _clean_hashtags(cls, value: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        for item in value:
+            text = str(item).strip()
+            if not text:
+                continue
+            cleaned.append(text)
+        return cleaned[:5]
+
+
+class DraftVideoExportRecord(BaseModel):
+    id: str
+    draft_id: str
+    status: str
+    result: DraftVideoExportPayload
+    model: str | None = None
+    error: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class DraftVideoExportListResponse(BaseModel):
+    items: list[DraftVideoExportRecord]
+    page: int = Field(ge=1)
+    page_size: int = Field(ge=1, le=100)
+    total: int = Field(ge=0)

@@ -307,6 +307,8 @@ PATCH  /api/drafts/{draft_id}/items/reorder
 PATCH  /api/drafts/{draft_id}/items/{item_id}
 DELETE /api/drafts/{draft_id}/items/{item_id}
 POST   /api/drafts/{draft_id}/approve
+POST   /api/drafts/{draft_id}/video-exports
+GET    /api/drafts/{draft_id}/video-exports
 
 POST   /api/drafts/{draft_id}/versions
 GET    /api/drafts/{draft_id}/versions
@@ -319,6 +321,7 @@ Database tables:
 drafts
 draft_items
 draft_versions
+draft_video_exports
 ```
 
 ### 3. Contracts
@@ -336,6 +339,10 @@ draft_versions
 - Draft approval creates or reuses an approved raw copy asset from `draft.current_text`, preserving draft provenance in `raw_copy.metadata.source_type = draft`, `source_draft_id`, and `source_draft_title`.
 - Draft approval records `metadata.knowledge_ingest.raw_copy_id` on the draft and must be idempotent; repeated approvals reuse that raw copy and rely on fragment extraction idempotency.
 - Draft approval triggers the existing approved-copy fragment extraction path, so generated fragments keep first-class `source_copy_id`.
+- `POST /api/drafts/{draft_id}/video-exports` creates an asynchronous task on the existing `recommendation` queue. The task reads `draft.current_text`, calls the LLM, validates a strict six-field video JSON payload, persists one `draft_video_exports` row, and returns that row through `TaskResponse.result`.
+- `GET /api/drafts/{draft_id}/video-exports` returns persisted conversion history newest first.
+- A video export record wraps metadata (`id`, `draft_id`, `status`, `model`, timestamps) around `result`. The `result` object is the only payload frontend should copy/download for the video processing pipeline.
+- `result` fields are exactly `title`, `title_break`, `description`, `script`, `tts_script`, and `hashtags`.
 
 ### 4. Validation & Error Matrix
 
@@ -350,6 +357,9 @@ draft_versions
 | Approve missing draft | `404` |
 | Approve draft with empty `current_text` | `409` |
 | Approve draft with existing `metadata.knowledge_ingest.raw_copy_id` | Reuse the raw copy and skip duplicate fragment creation |
+| Video export missing draft | `404` |
+| Video export empty draft | task status becomes `failed` with a clear error |
+| LLM returns invalid video JSON | task status becomes `failed`; no history row is created |
 | Database unavailable in tests/local fallback | Service falls back to in-memory store where implemented |
 
 ### 5. Good/Base/Bad Cases
@@ -357,8 +367,10 @@ draft_versions
 - Good: create an empty draft, add selected fragments one by one, edit item text, reorder items, then save a version snapshot.
 - Good: a saved version remains readable after one current draft item is deleted.
 - Good: approving a finished draft creates one approved raw copy and fragments that are retrievable through `/api/knowledge/fragments?source_copy_id=...`.
+- Good: generating video JSON creates a task with progress/model visibility and persists a history row that survives backend restart when PostgreSQL is configured.
 - Base: manually typed draft item can be added with `edited_text` and no source fragment.
 - Bad: do not expose raw UUIDs as the only user-visible content. Use `edited_text`, `original_fragment_text`, or source copy display fields where available.
+- Bad: do not make the frontend build the video-processing JSON from display metadata; copy/download must use the backend-validated `result` payload only.
 - Bad: do not treat archived drafts as deleted data; they are hidden from the default list but still retrievable.
 - Bad: do not create a separate draft-fragment source model for MVP; use raw copy projection so fragment retrieval remains consistent.
 
@@ -370,6 +382,7 @@ draft_versions
 - API test for manual version save/list/detail and immutable snapshots after current item deletion.
 - API test for draft approval creating raw copy plus fragments.
 - API test for draft approval idempotency and empty-draft failure.
+- API test for draft video export task success, persisted history, empty draft failure, and invalid LLM JSON failure.
 - Static check: `python -m ruff check app tests alembic`.
 - Full backend regression: `python -m pytest`.
 
@@ -415,6 +428,32 @@ then extracts fragments with source_copy_id = raw_copy.id.
 ```
 
 Approved drafts enter the knowledge base through the raw-copy projection so fragment retrieval, provenance, and source display stay consistent.
+
+#### Wrong
+
+```json
+{"id": "record-id", "model": "gpt-...", "title": "视频标题"}
+```
+
+#### Correct
+
+```json
+{
+  "id": "record-id",
+  "draft_id": "draft-id",
+  "model": "gpt-...",
+  "result": {
+    "title": "视频标题",
+    "title_break": "视频\n标题",
+    "description": "发布描述",
+    "script": "字幕正文",
+    "tts_script": "配音正文",
+    "hashtags": ["话题"]
+  }
+}
+```
+
+Video export API responses may include metadata, but the downstream video-processing JSON is the nested `result` object only.
 
 ## Scenario: Next-Sentence Recommendations
 

@@ -1,6 +1,6 @@
 from app.models.copy import CopyAnalysis, CopySource
 from app.models.composition import AcceptedComposition
-from app.models.draft import Draft, DraftItem, DraftVersion
+from app.models.draft import Draft, DraftItem, DraftVersion, DraftVideoExport
 from app.models.feedback import Feedback
 from app.models.generation import GenerationJob
 from app.models.knowledge import (
@@ -21,6 +21,7 @@ __all__ = [
     "Draft",
     "DraftItem",
     "DraftVersion",
+    "DraftVideoExport",
     "Feedback",
     "GenerationJob",
     "KnowledgeAnalysis",

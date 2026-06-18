@@ -284,6 +284,29 @@ export type DraftApprovalResponse = {
   fragment_extraction: FragmentExtractionResult;
 };
 
+export type DraftVideoExportPayload = {
+  title: string;
+  title_break: string;
+  description: string;
+  script: string;
+  tts_script: string;
+  hashtags: string[];
+};
+
+export type DraftVideoExportRecord = {
+  id: string;
+  draft_id: string;
+  status: string;
+  result: DraftVideoExportPayload;
+  model?: string | null;
+  error?: string | null;
+  metadata: Record<string, unknown>;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type DraftVideoExportListResponse = ListResponse<DraftVideoExportRecord>;
+
 export type ReferenceFragmentSummary = {
   id: string;
   text: string;

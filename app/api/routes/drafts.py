@@ -10,11 +10,14 @@ from app.schemas.draft import (
     DraftListResponse,
     DraftStatus,
     DraftUpdate,
+    DraftVideoExportListResponse,
     DraftVersionCreate,
     DraftVersionDetail,
     DraftVersionSummary,
 )
-from app.services import drafts
+from app.schemas.task import TaskResponse
+from app.services import draft_video_export, drafts
+from app.workers.recommendation_queue import enqueue_draft_video_export
 
 router = APIRouter()
 
@@ -71,6 +74,25 @@ def approve_draft(draft_id: str):
         raise HTTPException(status_code=404, detail="Draft not found") from None
     except drafts.DraftEmptyError:
         raise HTTPException(status_code=409, detail="Draft has no text to approve") from None
+
+
+@router.post("/{draft_id}/video-exports", response_model=TaskResponse)
+def create_draft_video_export(draft_id: str):
+    if drafts.get_draft(draft_id) is None:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    return enqueue_draft_video_export(draft_id)
+
+
+@router.get("/{draft_id}/video-exports", response_model=DraftVideoExportListResponse)
+def list_draft_video_exports(
+    draft_id: str,
+    page: int = _page_query(),
+    page_size: int = _page_size_query(),
+):
+    try:
+        return draft_video_export.list_draft_video_exports(draft_id, page, page_size)
+    except drafts.DraftNotFoundError:
+        raise HTTPException(status_code=404, detail="Draft not found") from None
 
 
 @router.post("/{draft_id}/items", response_model=DraftDetail)

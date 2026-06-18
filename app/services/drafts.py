@@ -63,6 +63,12 @@ def reset_draft_store() -> None:
     global _db_available, _store
     _store = _Store()
     _db_available = False if settings.app_env == "test" else None
+    try:
+        from app.services.draft_video_export import reset_draft_video_export_store
+
+        reset_draft_video_export_store()
+    except ImportError:
+        pass
 
 
 def list_drafts(

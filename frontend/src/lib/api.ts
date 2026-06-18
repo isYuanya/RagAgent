@@ -22,6 +22,8 @@ import type {
   DraftStatus,
   DraftSummary,
   DraftUpdate,
+  DraftVideoExportListResponse,
+  DraftVideoExportRecord,
   DraftVersionDetail,
   DraftVersionSummary,
   AcceptRecommendationRequest,
@@ -386,6 +388,24 @@ export function archiveDraft(id: string): Promise<void> {
 
 export function approveDraft(id: string): Promise<DraftApprovalResponse> {
   return writeJson(`${draftsBase}/${id}/approve`, "POST", {}, "审批通过失败");
+}
+
+export function createDraftVideoExport(id: string): Promise<TaskResponse> {
+  return writeJson(
+    `${draftsBase}/${id}/video-exports`,
+    "POST",
+    {},
+    "创建视频 JSON 任务失败"
+  );
+}
+
+export async function fetchDraftVideoExports(
+  id: string
+): Promise<DraftVideoExportRecord[]> {
+  const response = await fetch(`${draftsBase}/${id}/video-exports?page=1&page_size=20`);
+  if (!response.ok) throw new Error("加载视频 JSON 历史失败");
+  const payload = (await response.json()) as DraftVideoExportListResponse;
+  return payload.items;
 }
 
 export function addDraftItem(

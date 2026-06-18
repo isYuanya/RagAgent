@@ -272,3 +272,73 @@ type DraftApprovalResponse = {
 
 - `npm run build` must pass.
 - Backend `tests/test_drafts_api.py` must cover the endpoint behavior.
+
+## Scenario: Draft Video JSON Export API Layer
+
+### 1. Scope / Trigger
+
+- Trigger: frontend work that touches video-processing JSON generation from the draft workbench.
+- All draft video export calls must go through `frontend/src/lib/api.ts`.
+
+### 2. Signatures
+
+```ts
+createDraftVideoExport(id: string): Promise<TaskResponse>
+fetchDraftVideoExports(id: string): Promise<DraftVideoExportRecord[]>
+```
+
+Backend endpoints:
+
+```text
+POST /api/drafts/{draft_id}/video-exports
+GET  /api/drafts/{draft_id}/video-exports?page=1&page_size=20
+GET  /api/tasks/{task_id}
+```
+
+### 3. Contracts
+
+- Generation is asynchronous and uses the shared task polling contract.
+- The UI must show task progress, model, success, and failure state from `TaskResponse.progress`.
+- `TaskResponse.result` is a `DraftVideoExportRecord` when finished.
+- `DraftVideoExportRecord.result` is the strict downstream video-processing JSON.
+- Copy/download actions must serialize only `DraftVideoExportRecord.result`, not wrapper fields like `id`, `draft_id`, `model`, or timestamps.
+- The workbench may show record metadata for human traceability.
+
+### 4. Validation & Error Matrix
+
+| Condition | Backend | Frontend handling |
+|---|---|---|
+| Missing draft | 404 | backend detail -> toast |
+| Empty draft text | task `failed` | show task error toast |
+| LLM invalid JSON | task `failed` | show task error toast; history remains unchanged |
+| Generation success | task `finished` | refresh history and select the new record |
+| History load failure | non-ok response | toast and show empty history area |
+
+### 5. Good/Base/Bad Cases
+
+- Good: user clicks generate, sees progress/model, then copies a six-field JSON payload.
+- Good: existing history loads when switching back to a draft.
+- Base: no history exists; show an empty state without blocking draft editing.
+- Bad: component directly calls `fetch("/api/drafts/.../video-exports")`.
+- Bad: copy/download includes wrapper metadata and breaks the later video processing pipeline.
+
+### 6. Tests Required
+
+- `npm run build` must pass.
+- Backend `tests/test_drafts_api.py` must cover task success, history persistence, and invalid LLM JSON.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```tsx
+await navigator.clipboard.writeText(JSON.stringify(record));
+```
+
+#### Correct
+
+```tsx
+await navigator.clipboard.writeText(JSON.stringify(record.result, null, 2));
+```
+
+The API wrapper is for the workbench; `record.result` is the strict video-processing payload.

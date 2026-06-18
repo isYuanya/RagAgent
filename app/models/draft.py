@@ -80,3 +80,23 @@ class DraftVersion(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     draft: Mapped[Draft] = relationship(back_populates="versions")
+
+
+class DraftVideoExport(Base):
+    __tablename__ = "draft_video_exports"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
+    )
+    draft_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("drafts.id", ondelete="CASCADE")
+    )
+    status: Mapped[str] = mapped_column(String(40), default="finished")
+    result_json: Mapped[dict] = mapped_column(JSONB, default=dict)
+    model: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[dict] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

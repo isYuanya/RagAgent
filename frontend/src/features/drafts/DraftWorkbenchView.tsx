@@ -4,7 +4,10 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
+  Copy,
+  Download,
   FileClock,
+  FileJson,
   FilePlus2,
   Loader2,
   Plus,
@@ -39,9 +42,11 @@ import {
   createAutoComposition,
   createDraft,
   createDraftVersion,
+  createDraftVideoExport,
   createNextSentenceRecommendation,
   deleteDraftItem,
   fetchDraft,
+  fetchDraftVideoExports,
   fetchDraftVersions,
   fetchDrafts,
   fetchFragments,
@@ -64,6 +69,8 @@ import type {
   DraftItem,
   DraftStatus,
   DraftSummary,
+  DraftVideoExportPayload,
+  DraftVideoExportRecord,
   DraftVersionSummary,
   FragmentFilters,
   KnowledgeFragment,
@@ -72,6 +79,7 @@ import type {
   ReferenceFragmentSummary,
   TaskResponse
 } from "@/lib/types";
+import { Progress } from "@/components/ui/progress";
 
 const STATUS_LABELS: Record<DraftStatus, string> = {
   draft: "编辑中",
@@ -585,6 +593,8 @@ function DraftEditor({
           </div>
         </section>
 
+        <DraftVideoExportPanel draft={draft} />
+
         <div className="mb-3 flex items-center justify-between gap-3">
           <div className="text-sm font-semibold">段落编排（{draft.item_count}）</div>
           <ManualItemForm draft={draft} onDetailChange={onDetailChange} />
@@ -611,6 +621,198 @@ function DraftEditor({
         )}
       </div>
     </div>
+  );
+}
+
+function DraftVideoExportPanel({ draft }: { draft: DraftDetail }) {
+  const [records, setRecords] = React.useState<DraftVideoExportRecord[]>([]);
+  const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [task, setTask] = React.useState<TaskResponse | null>(null);
+  const [creating, setCreating] = React.useState(false);
+
+  const isRunning = task ? ["queued", "running"].includes(task.status) : false;
+  const selected = records.find((item) => item.id === selectedId) ?? records[0] ?? null;
+  const canCreate = draft.status !== "archived" && Boolean(draft.current_text.trim());
+
+  const loadRecords = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const items = await fetchDraftVideoExports(draft.id);
+      setRecords(items);
+      setSelectedId((current) =>
+        current && items.some((item) => item.id === current)
+          ? current
+          : items[0]?.id ?? null
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "加载视频 JSON 历史失败");
+      setRecords([]);
+      setSelectedId(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [draft.id]);
+
+  React.useEffect(() => {
+    setTask(null);
+    setSelectedId(null);
+    void loadRecords();
+  }, [loadRecords]);
+
+  React.useEffect(() => {
+    if (!task || !["queued", "running"].includes(task.status)) return;
+    const timer = window.setInterval(async () => {
+      const next = await fetchTask(task.task_id);
+      if (!next) return;
+      setTask(next);
+      if (next.status === "finished") {
+        const record = parseDraftVideoExportRecord(next.result);
+        await loadRecords();
+        if (record) setSelectedId(record.id);
+        toast.success("视频 JSON 已生成");
+      }
+      if (next.status === "failed") {
+        toast.error(next.error ?? "视频 JSON 生成失败");
+      }
+    }, 1200);
+    return () => window.clearInterval(timer);
+  }, [task?.task_id, task?.status, loadRecords]);
+
+  async function handleCreate() {
+    if (!canCreate) {
+      toast.error("草稿正文为空，无法生成视频 JSON");
+      return;
+    }
+    setCreating(true);
+    try {
+      const payload = await createDraftVideoExport(draft.id);
+      setTask(payload);
+      const record = parseDraftVideoExportRecord(payload.result);
+      if (payload.status === "finished" && record) {
+        await loadRecords();
+        setSelectedId(record.id);
+        toast.success("视频 JSON 已生成");
+      } else if (payload.status === "failed") {
+        toast.error(payload.error ?? "视频 JSON 生成失败");
+      } else {
+        toast.message(payload.progress?.current_message ?? "视频 JSON 任务已创建");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "创建视频 JSON 任务失败");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleCopy(record: DraftVideoExportRecord) {
+    try {
+      await navigator.clipboard.writeText(formatVideoExportJson(record.result));
+      toast.success("已复制视频 JSON");
+    } catch {
+      toast.error("复制失败，请手动复制");
+    }
+  }
+
+  function handleDownload(record: DraftVideoExportRecord) {
+    const blob = new Blob([formatVideoExportJson(record.result)], {
+      type: "application/json;charset=utf-8"
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${record.result.title || "video-copy"}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <section className="mb-4 rounded-lg border border-border bg-card p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            <FileJson className="size-4 text-primary" />
+            视频处理 JSON
+          </div>
+          <div className="mt-0.5 text-xs text-muted-foreground">
+            生成结果会保存为历史；复制和下载只包含六个视频处理字段。
+          </div>
+        </div>
+        <Button size="sm" onClick={handleCreate} disabled={!canCreate || creating || isRunning}>
+          {creating || isRunning ? <Loader2 className="animate-spin" /> : <Sparkles />}
+          生成
+        </Button>
+      </div>
+
+      {task?.progress ? (
+        <div className="mb-3 space-y-2 rounded-md border border-border bg-muted/30 p-3">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-medium">{task.progress.current_message ?? task.progress.phase}</span>
+            <span className="tabular-nums text-primary">{task.progress.percent}%</span>
+          </div>
+          <Progress value={task.progress.percent} aria-label="视频 JSON 生成进度" />
+          <div className="text-xs text-muted-foreground">
+            {task.progress.model ? `模型：${task.progress.model}` : "模型：未配置"}
+          </div>
+        </div>
+      ) : null}
+
+      {loading ? (
+        <Skeleton className="h-24 w-full" />
+      ) : selected ? (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {records.slice(0, 5).map((record) => (
+              <Button
+                key={record.id}
+                type="button"
+                size="sm"
+                variant={record.id === selected.id ? "secondary" : "outline"}
+                onClick={() => setSelectedId(record.id)}
+              >
+                {formatExportTime(record.created_at)}
+              </Button>
+            ))}
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-[260px_1fr]">
+            <div className="space-y-2 rounded-md border border-border bg-muted/20 p-3 text-sm">
+              <div className="font-medium">{selected.result.title}</div>
+              <div className="whitespace-pre-wrap text-xs text-muted-foreground">
+                {selected.result.title_break}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {selected.model ? `模型：${selected.model}` : "模型：未记录"}
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {selected.result.hashtags.map((tag) => (
+                  <Badge key={tag} variant="outline">
+                    {tag}
+                  </Badge>
+                ))}
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button size="sm" variant="outline" onClick={() => handleCopy(selected)}>
+                  <Copy />
+                  复制
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => handleDownload(selected)}>
+                  <Download />
+                  下载
+                </Button>
+              </div>
+            </div>
+            <pre className="max-h-72 overflow-auto rounded-md bg-muted/40 p-3 text-xs leading-5">
+              {formatVideoExportJson(selected.result)}
+            </pre>
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
+          暂无视频 JSON 历史。
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -1715,6 +1917,69 @@ function parseRecommendationResult(
       ? (result.reference_fragments as ReferenceFragmentSummary[])
       : []
   };
+}
+
+function parseDraftVideoExportRecord(
+  result: TaskResponse["result"]
+): DraftVideoExportRecord | null {
+  if (!result || typeof result !== "object") return null;
+  const payload = result.result;
+  if (!payload || typeof payload !== "object") return null;
+  const payloadRecord = payload as Record<string, unknown>;
+  if (
+    typeof result.id !== "string" ||
+    typeof result.draft_id !== "string" ||
+    typeof result.status !== "string" ||
+    typeof payloadRecord.title !== "string" ||
+    typeof payloadRecord.title_break !== "string" ||
+    typeof payloadRecord.description !== "string" ||
+    typeof payloadRecord.script !== "string" ||
+    typeof payloadRecord.tts_script !== "string" ||
+    !Array.isArray(payloadRecord.hashtags)
+  ) {
+    return null;
+  }
+  return {
+    id: result.id,
+    draft_id: result.draft_id,
+    status: result.status,
+    result: payload as DraftVideoExportPayload,
+    model: typeof result.model === "string" ? result.model : null,
+    error: typeof result.error === "string" ? result.error : null,
+    metadata:
+      result.metadata && typeof result.metadata === "object"
+        ? (result.metadata as Record<string, unknown>)
+        : {},
+    created_at: typeof result.created_at === "string" ? result.created_at : null,
+    updated_at: typeof result.updated_at === "string" ? result.updated_at : null
+  };
+}
+
+function formatVideoExportJson(result: DraftVideoExportPayload): string {
+  return JSON.stringify(
+    {
+      title: result.title,
+      title_break: result.title_break,
+      description: result.description,
+      script: result.script,
+      tts_script: result.tts_script,
+      hashtags: result.hashtags
+    },
+    null,
+    2
+  );
+}
+
+function formatExportTime(value?: string | null): string {
+  if (!value) return "最新";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "最新";
+  return date.toLocaleString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
 }
 
 function parseAutoCompositionResult(task: TaskResponse): AutoCompositionResult | null {
