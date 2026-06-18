@@ -570,6 +570,9 @@ accepted_compositions
 GET  /api/assistant/options
 POST /api/assistant/brief-prefill
 POST /api/assistant/runs
+POST /api/assistant/runs/{run_id}/confirm-materials
+POST /api/assistant/runs/{run_id}/confirm-composition
+POST /api/assistant/runs/{run_id}/confirm-rewrite
 GET  /api/assistant/runs
 GET  /api/assistant/runs/{run_id}
 ```
@@ -593,17 +596,26 @@ result.diagnosis
 result.composition_selection
 result.rewrite_selection
 result.draft.current_text
+metadata.pending_interrupt.type: confirm_materials | confirm_composition | confirm_rewrite
 ```
 
 ### 3. Contracts
 
-- `POST /api/assistant/runs` with `mode = "auto"` runs through final draft creation synchronously in the current MVP.
-- `mode = "guided"` generates composition candidates and stops with `status = "waiting_for_user"`; do not create a draft until confirm endpoints exist.
+- Smart composition workflow orchestration is implemented with LangGraph `StateGraph`.
+- `run_id` is the LangGraph `thread_id`.
+- MVP LangGraph checkpointing uses in-memory checkpoint storage. Backend restart can lose an unfinished guided interrupt execution state; durable checkpointing is a later task.
+- `POST /api/assistant/runs` with `mode = "auto"` runs through final draft creation through the graph.
+- `mode = "guided"` uses real LangGraph `interrupt()` and returns `status = "waiting_for_user"` at confirmation points.
+- Guided confirmation payloads are selection-only:
+  - `confirm-materials`: `{ "material_ids": ["..."] }`
+  - `confirm-composition`: `{ "candidate_id": "..." }`
+  - `confirm-rewrite`: `{ "rewrite_candidate_id": "..." }`
 - The workflow must save both an initial draft version and a final draft version for auto mode.
 - Candidate selection and rewrite selection must use rule scoring first, then an LLM judge over top candidates.
 - If the LLM judge returns invalid JSON, selects an unknown id, or fails, the backend must choose the highest rule-scored option and record `method = "rule_fallback"` plus `fallback_reason`.
 - Failed workflow runs must be persisted with `status = "failed"`, `error`, and the running step marked `failed`.
 - Workflows must follow the same DB-first, in-memory fallback convention used by knowledge and draft services in test/local unavailable DB paths.
+- `smart_composition_runs` remains the durable product history/read model; LangGraph checkpoint state is execution state only.
 
 ### 4. Validation & Error Matrix
 
@@ -613,20 +625,26 @@ result.draft.current_text
 | Brief prefill LLM JSON invalid | `422` with detail |
 | Auto workflow LLM/service failure | run persisted as `failed`; API surfaces the exception through route handling |
 | Missing run id | `404` |
-| Guided run created | `200` with `waiting_for_user`; not a failure |
+| Guided run created | `200` with `waiting_for_user` at material confirmation; not a failure |
+| Confirm endpoint called for the wrong current checkpoint | `409` |
+| Confirm endpoint receives an unknown selected id | `422` |
 
 ### 5. Good/Base/Bad Cases
 
 - Good: auto mode returns `finished`, a real `draft_id`, `initial_version_id`, `final_version_id`, and `result.draft.current_text`.
 - Good: frontend can render progress only from `timeline` without inferring hidden backend state.
+- Good: guided mode resumes through `confirm-materials`, `confirm-composition`, and `confirm-rewrite` without frontend manually stitching lower-level composition/diagnostic APIs.
 - Base: LLM judge fails; backend still finishes using rule fallback and explains the fallback.
 - Bad: frontend calls `/compositions/accepted` and `/diagnostics/accepted-rewrite` separately for the assistant; the assistant service owns orchestration and history.
 - Bad: guided mode silently proceeds past a confirmation point.
+- Bad: do not put draft/version side effects before an interrupt unless the node is idempotent.
 
 ### 6. Tests Required
 
 - API test that auto mode finishes and saves both draft versions.
-- API test that guided mode returns `waiting_for_user` after candidate generation.
+- API test that guided mode returns `waiting_for_user` at material confirmation.
+- API test that guided mode resumes through all confirmation endpoints and saves the final draft.
+- API test that unknown guided selections are rejected.
 - API test that brief prefill returns structured brief fields.
 - Regression test: `python -m pytest tests`.
 - Compile check: `python -m compileall app`.

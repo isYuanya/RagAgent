@@ -95,7 +95,14 @@ def reset_composition_store() -> None:
 
 
 def generate_auto_composition(payload: AutoCompositionRequest) -> AutoCompositionResult:
-    reference_fragments = _retrieve_reference_fragments(payload.brief)
+    reference_fragments = retrieve_reference_fragments(payload.brief)
+    return generate_auto_composition_from_references(payload, reference_fragments)
+
+
+def generate_auto_composition_from_references(
+    payload: AutoCompositionRequest,
+    reference_fragments: list[ReferenceFragmentSummary],
+) -> AutoCompositionResult:
     fallback_reason = None if reference_fragments else "no_matching_fragments"
     llm = get_llm_client()
     raw = llm.complete(_build_prompt(payload.brief, reference_fragments, fallback_reason))
@@ -166,7 +173,7 @@ def accept_composition(payload: AcceptCompositionRequest) -> AcceptCompositionRe
     return AcceptCompositionResponse(accepted=accepted, draft=draft)
 
 
-def _retrieve_reference_fragments(brief: AutoCompositionBrief) -> list[ReferenceFragmentSummary]:
+def retrieve_reference_fragments(brief: AutoCompositionBrief) -> list[ReferenceFragmentSummary]:
     fragments = []
     seen: set[str] = set()
     for query in _reference_queries(brief):

@@ -186,7 +186,7 @@ def test_auto_run_finishes_and_saves_initial_and_final_versions(monkeypatch) -> 
     assert list_response.json()["items"][0]["id"] == payload["id"]
 
 
-def test_guided_run_pauses_after_generating_composition(monkeypatch) -> None:
+def test_guided_run_pauses_for_material_confirmation(monkeypatch) -> None:
     global _current_fragment_id
     _current_fragment_id = _create_approved_fragment()
     monkeypatch.setattr("app.services.compositions.get_llm_client", lambda: FakeCompositionLLMClient())
@@ -197,8 +197,78 @@ def test_guided_run_pauses_after_generating_composition(monkeypatch) -> None:
     payload = response.json()
     assert payload["status"] == "waiting_for_user"
     assert payload["draft_id"] is None
-    assert payload["result"]["composition"]["candidates"]
+    assert payload["result"]["composition"] is None
+    assert payload["result"]["materials"][0]["id"] == _current_fragment_id
+    assert payload["metadata"]["pending_interrupt"]["type"] == "confirm_materials"
     assert any(step["status"] == "waiting_for_user" for step in payload["timeline"])
+
+
+def test_guided_run_resumes_through_all_confirmations(monkeypatch) -> None:
+    global _current_fragment_id
+    _current_fragment_id = _create_approved_fragment()
+    monkeypatch.setattr("app.services.compositions.get_llm_client", lambda: FakeCompositionLLMClient())
+    monkeypatch.setattr("app.services.diagnostics.get_llm_client", lambda: FakeDiagnosticLLMClient())
+
+    start_response = client.post("/api/assistant/runs", json={"mode": "guided", "brief": _brief()})
+    assert start_response.status_code == 200
+    run = start_response.json()
+
+    material_response = client.post(
+        f"/api/assistant/runs/{run['id']}/confirm-materials",
+        json={"material_ids": [_current_fragment_id]},
+    )
+    assert material_response.status_code == 200
+    run = material_response.json()
+    assert run["status"] == "waiting_for_user"
+    assert run["metadata"]["pending_interrupt"]["type"] == "confirm_composition"
+    assert run["result"]["composition"]["candidates"]
+    candidate_id = run["result"]["composition"]["candidates"][0]["candidate_id"]
+
+    composition_response = client.post(
+        f"/api/assistant/runs/{run['id']}/confirm-composition",
+        json={"candidate_id": candidate_id},
+    )
+    assert composition_response.status_code == 200
+    run = composition_response.json()
+    assert run["status"] == "waiting_for_user"
+    assert run["draft_id"]
+    assert run["initial_version_id"]
+    assert run["metadata"]["pending_interrupt"]["type"] == "confirm_rewrite"
+    assert run["result"]["diagnosis"]["rewrite_candidates"]
+
+    rewrite_response = client.post(
+        f"/api/assistant/runs/{run['id']}/confirm-rewrite",
+        json={"rewrite_candidate_id": "safe"},
+    )
+    assert rewrite_response.status_code == 200
+    run = rewrite_response.json()
+    assert run["status"] == "finished"
+    assert run["final_version_id"]
+    assert run["result"]["draft"]["current_text"] == "Final rewritten copy with a safer promise."
+    assert run["result"]["composition_selection"]["method"] == "user"
+    assert run["result"]["rewrite_selection"]["method"] == "user"
+
+    repeat_response = client.post(
+        f"/api/assistant/runs/{run['id']}/confirm-rewrite",
+        json={"rewrite_candidate_id": "safe"},
+    )
+    assert repeat_response.status_code == 409
+
+
+def test_guided_confirm_rejects_unknown_selection(monkeypatch) -> None:
+    global _current_fragment_id
+    _current_fragment_id = _create_approved_fragment()
+    monkeypatch.setattr("app.services.compositions.get_llm_client", lambda: FakeCompositionLLMClient())
+
+    start_response = client.post("/api/assistant/runs", json={"mode": "guided", "brief": _brief()})
+    run = start_response.json()
+
+    response = client.post(
+        f"/api/assistant/runs/{run['id']}/confirm-materials",
+        json={"material_ids": ["missing"]},
+    )
+
+    assert response.status_code == 422
 
 
 def test_brief_prefill_returns_structured_options(monkeypatch) -> None:

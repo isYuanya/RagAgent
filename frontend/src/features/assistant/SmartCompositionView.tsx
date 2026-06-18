@@ -28,6 +28,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { EmptyState } from "@/features/shared/EmptyState";
 import {
+  confirmSmartCompositionCandidate,
+  confirmSmartCompositionMaterials,
+  confirmSmartCompositionRewrite,
   createSmartCompositionRun,
   fetchSmartCompositionRun,
   fetchSmartCompositionRuns,
@@ -95,6 +98,7 @@ export function SmartCompositionView({
   const [prefillText, setPrefillText] = React.useState("");
   const [prefilling, setPrefilling] = React.useState(false);
   const [running, setRunning] = React.useState(false);
+  const [confirming, setConfirming] = React.useState(false);
   const [selectedRun, setSelectedRun] = React.useState<SmartCompositionRunDetail | null>(null);
 
   const loadHistory = React.useCallback(async () => {
@@ -165,6 +169,57 @@ export function SmartCompositionView({
       setSelectedRun(await fetchSmartCompositionRun(id));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "加载智能组稿详情失败");
+    }
+  }
+
+  async function handleConfirmMaterials(materialIds: string[]) {
+    if (!selectedRun) return;
+    setConfirming(true);
+    try {
+      const run = await confirmSmartCompositionMaterials(selectedRun.id, {
+        material_ids: materialIds
+      });
+      setSelectedRun(run);
+      await loadHistory();
+      toast.success("素材已确认");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "确认素材失败");
+    } finally {
+      setConfirming(false);
+    }
+  }
+
+  async function handleConfirmComposition(candidateId: string) {
+    if (!selectedRun) return;
+    setConfirming(true);
+    try {
+      const run = await confirmSmartCompositionCandidate(selectedRun.id, {
+        candidate_id: candidateId
+      });
+      setSelectedRun(run);
+      await loadHistory();
+      toast.success("组稿已确认");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "确认组稿失败");
+    } finally {
+      setConfirming(false);
+    }
+  }
+
+  async function handleConfirmRewrite(rewriteCandidateId: string) {
+    if (!selectedRun) return;
+    setConfirming(true);
+    try {
+      const run = await confirmSmartCompositionRewrite(selectedRun.id, {
+        rewrite_candidate_id: rewriteCandidateId
+      });
+      setSelectedRun(run);
+      await loadHistory();
+      toast.success("终稿已保存");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "确认改写失败");
+    } finally {
+      setConfirming(false);
     }
   }
 
@@ -302,7 +357,13 @@ export function SmartCompositionView({
 
         <Card className="min-h-0 overflow-hidden p-0">
           {selectedRun ? (
-            <RunDetail run={selectedRun} />
+            <RunDetail
+              run={selectedRun}
+              confirming={confirming}
+              onConfirmMaterials={handleConfirmMaterials}
+              onConfirmComposition={handleConfirmComposition}
+              onConfirmRewrite={handleConfirmRewrite}
+            />
           ) : (
             <div className="flex h-full items-center justify-center p-6">
               <EmptyState
@@ -465,7 +526,19 @@ function RunHistory({
   );
 }
 
-function RunDetail({ run }: { run: SmartCompositionRunDetail }) {
+function RunDetail({
+  run,
+  confirming,
+  onConfirmMaterials,
+  onConfirmComposition,
+  onConfirmRewrite
+}: {
+  run: SmartCompositionRunDetail;
+  confirming: boolean;
+  onConfirmMaterials: (materialIds: string[]) => void;
+  onConfirmComposition: (candidateId: string) => void;
+  onConfirmRewrite: (rewriteCandidateId: string) => void;
+}) {
   const currentPercent = run.timeline.reduce(
     (value, step) => (step.status === "completed" ? Math.max(value, step.percent) : value),
     0
@@ -502,6 +575,13 @@ function RunDetail({ run }: { run: SmartCompositionRunDetail }) {
           <SelectionBlock title="改写选择" selection={run.result.rewrite_selection} />
         </div>
         <div className="min-h-0 overflow-y-auto p-5">
+          <GuidedActions
+            run={run}
+            confirming={confirming}
+            onConfirmMaterials={onConfirmMaterials}
+            onConfirmComposition={onConfirmComposition}
+            onConfirmRewrite={onConfirmRewrite}
+          />
           {finalText ? (
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-sm font-semibold">
@@ -523,6 +603,118 @@ function RunDetail({ run }: { run: SmartCompositionRunDetail }) {
       </div>
     </div>
   );
+}
+
+function GuidedActions({
+  run,
+  confirming,
+  onConfirmMaterials,
+  onConfirmComposition,
+  onConfirmRewrite
+}: {
+  run: SmartCompositionRunDetail;
+  confirming: boolean;
+  onConfirmMaterials: (materialIds: string[]) => void;
+  onConfirmComposition: (candidateId: string) => void;
+  onConfirmRewrite: (rewriteCandidateId: string) => void;
+}) {
+  const pending = run.metadata.pending_interrupt;
+  const pendingType =
+    pending && typeof pending === "object" && "type" in pending
+      ? String((pending as { type?: unknown }).type)
+      : "";
+
+  if (run.status !== "waiting_for_user") return null;
+
+  if (pendingType === "confirm_materials") {
+    const materialIds = run.result.materials.map((item) => item.id);
+    return (
+      <div className="mb-5 rounded-md border border-border p-4">
+        <div className="mb-3 text-sm font-semibold">确认参考素材</div>
+        <div className="space-y-2">
+          {run.result.materials.map((item) => (
+            <div key={item.id} className="rounded-md bg-muted/30 p-3 text-sm">
+              <div className="text-xs text-muted-foreground">
+                {item.role ?? "素材"} / {item.position ?? "位置未标注"}
+              </div>
+              <div className="mt-1 line-clamp-3">{item.text}</div>
+            </div>
+          ))}
+        </div>
+        <Button
+          className="mt-3"
+          disabled={confirming}
+          onClick={() => onConfirmMaterials(materialIds)}
+        >
+          {confirming ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+          使用这些素材继续
+        </Button>
+      </div>
+    );
+  }
+
+  if (pendingType === "confirm_composition") {
+    const candidates = run.result.composition?.candidates ?? [];
+    return (
+      <div className="mb-5 rounded-md border border-border p-4">
+        <div className="mb-3 text-sm font-semibold">选择组稿方案</div>
+        <div className="space-y-3">
+          {candidates.map((candidate) => (
+            <div key={candidate.candidate_id} className="rounded-md bg-muted/30 p-3">
+              <div className="text-sm font-medium">{candidate.title}</div>
+              <div className="mt-1 text-xs text-muted-foreground">{candidate.strategy}</div>
+              <div className="mt-2 space-y-1 text-sm">
+                {candidate.items.map((item) => (
+                  <div key={`${candidate.candidate_id}-${item.role}`}>
+                    <span className="font-medium">{item.role}</span>：{item.text}
+                  </div>
+                ))}
+              </div>
+              <Button
+                className="mt-3"
+                variant="outline"
+                disabled={confirming}
+                onClick={() => onConfirmComposition(candidate.candidate_id)}
+              >
+                选择这个组稿
+              </Button>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (pendingType === "confirm_rewrite") {
+    const rewrites = run.result.diagnosis?.rewrite_candidates ?? [];
+    return (
+      <div className="mb-5 rounded-md border border-border p-4">
+        <div className="mb-3 text-sm font-semibold">选择终稿改写</div>
+        <div className="space-y-3">
+          {rewrites.map((rewrite) => (
+            <div key={rewrite.candidate_id} className="rounded-md bg-muted/30 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-sm font-medium">{rewrite.title}</div>
+                <Badge variant="outline">{rewrite.mode}</Badge>
+              </div>
+              <div className="mt-2 whitespace-pre-wrap text-sm leading-6">{rewrite.text}</div>
+              <div className="mt-2 text-xs text-muted-foreground">{rewrite.reason}</div>
+              <Button
+                className="mt-3"
+                variant="outline"
+                disabled={confirming}
+                onClick={() => onConfirmRewrite(rewrite.candidate_id)}
+              >
+                选为终稿
+              </Button>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 function StepRow({ step }: { step: SmartCompositionStep }) {

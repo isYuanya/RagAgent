@@ -1,6 +1,9 @@
 from fastapi import APIRouter, HTTPException, Query
 
 from app.schemas.smart_composition import (
+    ConfirmCompositionRequest,
+    ConfirmMaterialsRequest,
+    ConfirmRewriteRequest,
     SmartCompositionBriefPrefillRequest,
     SmartCompositionBriefPrefillResponse,
     SmartCompositionOptions,
@@ -42,6 +45,51 @@ def create_run(payload: SmartCompositionRunCreate) -> SmartCompositionRunDetail:
         return smart_composition.create_run(payload)
     except smart_composition.SmartCompositionError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
+
+
+@router.post("/runs/{run_id}/confirm-materials", response_model=SmartCompositionRunDetail)
+def confirm_materials(
+    run_id: str,
+    payload: ConfirmMaterialsRequest,
+) -> SmartCompositionRunDetail:
+    try:
+        return smart_composition.confirm_materials(run_id, payload)
+    except smart_composition.SmartCompositionRunNotFoundError:
+        raise HTTPException(status_code=404, detail="Smart composition run not found") from None
+    except smart_composition.SmartCompositionInvalidResumeError:
+        raise HTTPException(status_code=409, detail="Smart composition run is not waiting for material confirmation") from None
+    except smart_composition.SmartCompositionInvalidSelectionError:
+        raise HTTPException(status_code=422, detail="Unknown material id") from None
+
+
+@router.post("/runs/{run_id}/confirm-composition", response_model=SmartCompositionRunDetail)
+def confirm_composition(
+    run_id: str,
+    payload: ConfirmCompositionRequest,
+) -> SmartCompositionRunDetail:
+    try:
+        return smart_composition.confirm_composition(run_id, payload)
+    except smart_composition.SmartCompositionRunNotFoundError:
+        raise HTTPException(status_code=404, detail="Smart composition run not found") from None
+    except smart_composition.SmartCompositionInvalidResumeError:
+        raise HTTPException(status_code=409, detail="Smart composition run is not waiting for composition confirmation") from None
+    except smart_composition.SmartCompositionInvalidSelectionError:
+        raise HTTPException(status_code=422, detail="Unknown composition candidate id") from None
+
+
+@router.post("/runs/{run_id}/confirm-rewrite", response_model=SmartCompositionRunDetail)
+def confirm_rewrite(
+    run_id: str,
+    payload: ConfirmRewriteRequest,
+) -> SmartCompositionRunDetail:
+    try:
+        return smart_composition.confirm_rewrite(run_id, payload)
+    except smart_composition.SmartCompositionRunNotFoundError:
+        raise HTTPException(status_code=404, detail="Smart composition run not found") from None
+    except smart_composition.SmartCompositionInvalidResumeError:
+        raise HTTPException(status_code=409, detail="Smart composition run is not waiting for rewrite confirmation") from None
+    except smart_composition.SmartCompositionInvalidSelectionError:
+        raise HTTPException(status_code=422, detail="Unknown rewrite candidate id") from None
 
 
 @router.get("/runs", response_model=SmartCompositionRunListResponse)

@@ -99,6 +99,18 @@ class SmartCompositionRunCreate(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class ConfirmMaterialsRequest(BaseModel):
+    material_ids: list[str] = Field(default_factory=list)
+
+
+class ConfirmCompositionRequest(BaseModel):
+    candidate_id: str = Field(min_length=1)
+
+
+class ConfirmRewriteRequest(BaseModel):
+    rewrite_candidate_id: str = Field(min_length=1)
+
+
 class SmartCompositionRunSummary(BaseModel):
     id: str
     mode: SmartCompositionMode

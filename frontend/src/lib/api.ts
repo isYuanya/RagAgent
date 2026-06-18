@@ -31,6 +31,9 @@ import type {
   AcceptDiagnosticRewriteResponse,
   AutoCompositionRequest,
   CopyDiagnosisRequest,
+  ConfirmCompositionRequest,
+  ConfirmMaterialsRequest,
+  ConfirmRewriteRequest,
   SmartCompositionBriefPrefillResponse,
   SmartCompositionOptions,
   SmartCompositionRunCreate,
@@ -515,6 +518,42 @@ export async function fetchSmartCompositionRun(
   const response = await fetch(`${assistantBase}/runs/${id}`);
   if (!response.ok) throw new Error("加载智能组稿详情失败");
   return (await response.json()) as SmartCompositionRunDetail;
+}
+
+export function confirmSmartCompositionMaterials(
+  runId: string,
+  body: ConfirmMaterialsRequest
+): Promise<SmartCompositionRunDetail> {
+  return writeJson(
+    `${assistantBase}/runs/${runId}/confirm-materials`,
+    "POST",
+    body,
+    "确认素材失败"
+  );
+}
+
+export function confirmSmartCompositionCandidate(
+  runId: string,
+  body: ConfirmCompositionRequest
+): Promise<SmartCompositionRunDetail> {
+  return writeJson(
+    `${assistantBase}/runs/${runId}/confirm-composition`,
+    "POST",
+    body,
+    "确认组稿失败"
+  );
+}
+
+export function confirmSmartCompositionRewrite(
+  runId: string,
+  body: ConfirmRewriteRequest
+): Promise<SmartCompositionRunDetail> {
+  return writeJson(
+    `${assistantBase}/runs/${runId}/confirm-rewrite`,
+    "POST",
+    body,
+    "确认改写失败"
+  );
 }
 
 export function createAutoComposition(

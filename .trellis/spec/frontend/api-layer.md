@@ -172,6 +172,9 @@ prefillSmartCompositionBrief(text: string): Promise<SmartCompositionBriefPrefill
 createSmartCompositionRun(body: SmartCompositionRunCreate): Promise<SmartCompositionRunDetail>
 fetchSmartCompositionRuns(): Promise<SmartCompositionRunSummary[]>
 fetchSmartCompositionRun(id: string): Promise<SmartCompositionRunDetail>
+confirmSmartCompositionMaterials(runId, body): Promise<SmartCompositionRunDetail>
+confirmSmartCompositionCandidate(runId, body): Promise<SmartCompositionRunDetail>
+confirmSmartCompositionRewrite(runId, body): Promise<SmartCompositionRunDetail>
 ```
 
 ### 3. Contracts
@@ -179,6 +182,8 @@ fetchSmartCompositionRun(id: string): Promise<SmartCompositionRunDetail>
 - The view should default to `mode: "auto"` because the product direction is one-click completion.
 - `mode: "guided"` is valid but currently stops at `waiting_for_user`; do not show that as an error.
 - Progress UI must use `run.timeline`; do not infer progress from draft ids.
+- Guided UI decides which confirmation panel to render from `run.metadata.pending_interrupt.type`.
+- Confirmation payloads are selection-only; do not send edited candidate or rewrite text in MVP.
 - Final preview should use `run.result.draft.current_text`.
 - Model display can use `timeline[].model`, `result.composition.model`, and `result.diagnosis.model`.
 - Selection explanation should render `result.composition_selection` and `result.rewrite_selection`.
@@ -191,11 +196,14 @@ fetchSmartCompositionRun(id: string): Promise<SmartCompositionRunDetail>
 | LLM prefill parse failure | 422 | backend detail -> toast |
 | Missing workflow run | 404 | backend detail -> toast |
 | Guided waiting state | 200 `waiting_for_user` | show waiting/confirm state, not error |
+| Confirm called at wrong checkpoint | 409 | backend detail -> toast |
+| Unknown selected id | 422 | backend detail -> toast |
 | Auto finished | 200 `finished` | show final draft preview and version ids if needed |
 
 ### 5. Good/Base/Bad Cases
 
 - Good: user fills selection-first form, clicks one button, sees completed timeline and final text.
+- Good: guided user confirms materials, then candidate, then rewrite through typed API functions.
 - Good: user opens a recent workflow run from history and sees the same persisted state.
 - Base: no history exists; show empty state.
 - Bad: component fetches `/api/assistant/*` directly instead of calling `lib/api.ts`.

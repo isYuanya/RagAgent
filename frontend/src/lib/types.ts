@@ -452,6 +452,18 @@ export type SmartCompositionRunCreate = {
   metadata?: Record<string, unknown>;
 };
 
+export type ConfirmMaterialsRequest = {
+  material_ids: string[];
+};
+
+export type ConfirmCompositionRequest = {
+  candidate_id: string;
+};
+
+export type ConfirmRewriteRequest = {
+  rewrite_candidate_id: string;
+};
+
 export type SmartCompositionRunListResponse =
   ListResponse<SmartCompositionRunSummary>;
 
