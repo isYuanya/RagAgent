@@ -270,3 +270,36 @@ Implemented asynchronous next-sentence recommendation APIs, accepted recommendat
 ### Next Steps
 
 - None - task complete
+
+
+## Session 9: 草稿审批入知识库
+
+**Date**: 2026-06-18
+**Task**: 草稿审批入知识库
+**Branch**: `master`
+
+### Summary
+
+新增草稿审批通过接口，审批后复用 ready 状态，创建或复用 approved raw copy 并触发片段拆解入知识库；前端草稿工作台增加审批通过按钮；补充后端测试和跨层规格。验证通过 ruff、全量 pytest、frontend build。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `27e13ed` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
