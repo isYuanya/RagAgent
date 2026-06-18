@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 9
+- **Total Sessions**: 10
 - **Last Active**: 2026-06-18
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~305 | Active |
+| `journal-1.md` | ~338 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 10 | 2026-06-18 | 草稿视频 JSON 导出 | `88f24b8` | `master` |
 | 9 | 2026-06-18 | 草稿审批入知识库 | `27e13ed` | `master` |
 | 8 | 2026-06-18 | LangGraph 智能组稿改造 | `12ae0ca` | `master` |
 | 7 | 2026-06-17 | 智能组稿助手工作流 | `43d59b2` | `master` |

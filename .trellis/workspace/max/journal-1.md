@@ -303,3 +303,36 @@ Implemented asynchronous next-sentence recommendation APIs, accepted recommendat
 ### Next Steps
 
 - None - task complete
+
+
+## Session 10: 草稿视频 JSON 导出
+
+**Date**: 2026-06-18
+**Task**: 草稿视频 JSON 导出
+**Branch**: `master`
+
+### Summary
+
+实现草稿工作台视频处理 JSON 异步生成、持久化历史、前端复制下载和接口规范。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `88f24b8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
