@@ -336,3 +336,36 @@ Implemented asynchronous next-sentence recommendation APIs, accepted recommendat
 ### Next Steps
 
 - None - task complete
+
+
+## Session 11: 强化视频 JSON 输出规则
+
+**Date**: 2026-06-18
+**Task**: 强化视频 JSON 输出规则
+**Branch**: `master`
+
+### Summary
+
+强化草稿视频 JSON 的标题、描述、标题字幕、脚本、TTS 一致性、高风险词和话题标签规则。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6929705` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
