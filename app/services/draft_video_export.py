@@ -47,7 +47,7 @@ def generate_draft_video_export(draft_id: str) -> DraftVideoExportRecord:
         raise drafts.DraftEmptyError("Draft has no text to export")
 
     llm = get_llm_client()
-    raw = llm.complete(_build_prompt(draft_id, text))
+    raw = llm.complete(_build_video_export_prompt(draft_id, text))
     model = getattr(llm, "model", settings.openai_model)
 
     try:
@@ -172,6 +172,42 @@ def _record_from_model(row: DraftVideoExportModel) -> DraftVideoExportRecord:
         metadata=row.metadata_json or {},
         created_at=_datetime_to_str(row.created_at),
         updated_at=_datetime_to_str(row.updated_at),
+    )
+
+
+def _build_video_export_prompt(draft_id: str, text: str) -> str:
+    context = {"draft_id": draft_id, "current_text": text}
+    return (
+        "You are a short-video copy formatting assistant.\n"
+        "Return one valid JSON object only. Do not return Markdown, code fences, or explanations.\n"
+        "All natural-language fields must be Simplified Chinese.\n"
+        "The JSON object must contain exactly these fields:\n"
+        '{"title":"2-16字视频发布标题","title_break":"顶部标题字幕，可最多一处换行",'
+        '"description":"10-100字发布描述","script":"完整口播正文",'
+        '"tts_script":"与script文字一致，可仅额外添加必要多音字拼音标注","hashtags":["最多5个话题文本，不带#"]}\n'
+        "Rules:\n"
+        "- title must be 2-16 Chinese characters, like a publishing title, not a long sentence.\n"
+        "- title should avoid colon, question mark, exclamation mark, and complex punctuation.\n"
+        "- title, title_break, and description must avoid these high-risk marketing terms: "
+        "白户, 黑户, 包过, 包下, 秒批, 必下, 强开, 无视征信, 洗白征信, 包装资料, 流水, 百分百, 100%.\n"
+        "- If source text contains high-risk terms, rewrite them into neutral wording: "
+        "白户 -> 征信空白 or 信用记录少; 黑户 -> 严重逾期记录; 秒批/必下 -> 审批更快 or 匹配度更高.\n"
+        "- description is required, 10-100 Chinese characters, and must summarize the core video idea. "
+        "Do not copy the full spoken script.\n"
+        "- title_break is for prominent top-of-video title subtitles, not the publishing title.\n"
+        "- title_break must express the same meaning as title. It may be visually clearer, but must not add promises, quota guarantees, or change the core meaning.\n"
+        "- title_break may contain at most two lines, using one newline character \\n. Short titles may have no newline.\n"
+        "- title_break must split by meaning naturally, such as object/problem/result/action. Do not split one word, number-unit, or proper noun.\n"
+        "- Each title_break line should preferably be 6-12 Chinese characters.\n"
+        "- script must be a complete directly speakable script with its own hook and natural ending. The backend will not append hook or ending.\n"
+        "- script must not depend on separate hook or ending fields, and must not repeat the same opening or ending sentence.\n"
+        "- script ending must not contain interactive instructions such as 评论, 留言, 私信, 加好友, 打关键词, or 说出自己情况.\n"
+        "- script must not contain pronunciation or pinyin annotations, including bracketed forms like [háng], [huán], [xíng].\n"
+        "- script is normal subtitle and spoken-copy text for viewers.\n"
+        "- script and tts_script must keep the same text content. tts_script may only add necessary pinyin annotations for polyphonic words, and must not rewrite, add, delete, or replace words.\n"
+        "- script itself should use natural spoken language and avoid formal phrasing that TTS may segment poorly.\n"
+        "- hashtags must contain at most 5 plain topic strings. Do not prefix hashtags with #.\n"
+        f"Context JSON:\n{json.dumps(context, ensure_ascii=False)}"
     )
 
 

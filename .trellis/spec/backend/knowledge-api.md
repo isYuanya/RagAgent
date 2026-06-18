@@ -343,6 +343,13 @@ draft_video_exports
 - `GET /api/drafts/{draft_id}/video-exports` returns persisted conversion history newest first.
 - A video export record wraps metadata (`id`, `draft_id`, `status`, `model`, timestamps) around `result`. The `result` object is the only payload frontend should copy/download for the video processing pipeline.
 - `result` fields are exactly `title`, `title_break`, `description`, `script`, `tts_script`, and `hashtags`.
+- `title` is a publishing title: 2-16 characters, short, not a long sentence, and should avoid complex punctuation.
+- `title`, `title_break`, and `description` must reject high-risk marketing terms such as `白户`, `黑户`, `包过`, `包下`, `秒批`, `必下`, `强开`, `无视征信`, `洗白征信`, `包装资料`, `刷流水`, `百分百`, and `100%`. Prompt should ask the LLM to rewrite them into neutral wording before validation.
+- `description` is required, 10-100 characters, and must summarize the core video content instead of copying the full spoken script.
+- `title_break` is for top-of-video subtitle display, not publishing metadata. It must keep the same meaning as `title`, may contain at most one `\n`, and must not add promises or guarantees.
+- `script` must be complete by itself, include its own hook and natural ending, and must not end with interactive instructions such as comment, message, private message, add friend, keyword, or describing personal details.
+- `script` must not contain bracketed pronunciation/pinyin annotations like `[háng]`; `tts_script` may add necessary annotations only when the underlying text still matches `script`.
+- `hashtags` are plain topic strings without `#`; frontend may display them comma-separated, but copy/download still keeps the array shape.
 
 ### 4. Validation & Error Matrix
 
@@ -360,6 +367,10 @@ draft_video_exports
 | Video export missing draft | `404` |
 | Video export empty draft | task status becomes `failed` with a clear error |
 | LLM returns invalid video JSON | task status becomes `failed`; no history row is created |
+| Video export `title`, `title_break`, or `description` contains high-risk marketing terms | task status becomes `failed`; no history row is created |
+| Video export `title_break` contains more than one newline | task status becomes `failed`; no history row is created |
+| Video export `script` contains bracketed pinyin annotations or ends with interaction instructions | task status becomes `failed`; no history row is created |
+| Video export `tts_script` rewrites content instead of matching `script` except pinyin annotations | task status becomes `failed`; no history row is created |
 | Database unavailable in tests/local fallback | Service falls back to in-memory store where implemented |
 
 ### 5. Good/Base/Bad Cases
@@ -383,6 +394,7 @@ draft_video_exports
 - API test for draft approval creating raw copy plus fragments.
 - API test for draft approval idempotency and empty-draft failure.
 - API test for draft video export task success, persisted history, empty draft failure, and invalid LLM JSON failure.
+- Schema test for draft video export risk terms, title break line count, script pinyin annotations, interactive endings, TTS/script consistency, and hashtag cleaning.
 - Static check: `python -m ruff check app tests alembic`.
 - Full backend regression: `python -m pytest`.
 

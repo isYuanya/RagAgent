@@ -303,6 +303,7 @@ GET  /api/tasks/{task_id}
 - `DraftVideoExportRecord.result` is the strict downstream video-processing JSON.
 - Copy/download actions must serialize only `DraftVideoExportRecord.result`, not wrapper fields like `id`, `draft_id`, `model`, or timestamps.
 - The workbench may show record metadata for human traceability.
+- `hashtags` values are plain topic strings without `#`; the workbench may display them comma-separated for readability, but copied/downloaded JSON keeps the `hashtags: string[]` array.
 
 ### 4. Validation & Error Matrix
 
@@ -317,6 +318,7 @@ GET  /api/tasks/{task_id}
 ### 5. Good/Base/Bad Cases
 
 - Good: user clicks generate, sees progress/model, then copies a six-field JSON payload.
+- Good: hashtag display reads like `贷款, 征信空白`, while the copied JSON remains `["贷款", "征信空白"]`.
 - Good: existing history loads when switching back to a draft.
 - Base: no history exists; show an empty state without blocking draft editing.
 - Bad: component directly calls `fetch("/api/drafts/.../video-exports")`.

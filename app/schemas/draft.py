@@ -1,3 +1,4 @@
+import re
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -7,6 +8,30 @@ from app.schemas.knowledge import FragmentExtractionResult
 
 
 DraftStatus = Literal["draft", "ready", "archived"]
+HIGH_RISK_VIDEO_EXPORT_TERMS = (
+    "白户",
+    "黑户",
+    "包过",
+    "包下",
+    "秒批",
+    "必下",
+    "强开",
+    "无视征信",
+    "洗白征信",
+    "包装资料",
+    "刷流水",
+    "百分百",
+    "100%",
+)
+INTERACTIVE_ENDING_PATTERNS = (
+    "评论",
+    "留言",
+    "私信",
+    "加好友",
+    "打关键词",
+    "说出自己情况",
+)
+PINYIN_ANNOTATION_PATTERN = re.compile(r"\[[A-Za-zāáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜüÜ]+\]")
 
 
 class DraftCreate(BaseModel):
@@ -146,16 +171,51 @@ class DraftVideoExportPayload(BaseModel):
     def _strip_text(cls, value: str) -> str:
         return value.strip()
 
+    @field_validator("title", "title_break", "description")
+    @classmethod
+    def _reject_high_risk_terms(cls, value: str) -> str:
+        matched = [term for term in HIGH_RISK_VIDEO_EXPORT_TERMS if term in value]
+        if matched:
+            raise ValueError(f"high-risk marketing terms are not allowed: {', '.join(matched)}")
+        return value
+
+    @field_validator("title_break")
+    @classmethod
+    def _validate_title_break_lines(cls, value: str) -> str:
+        if value.count("\n") > 1:
+            raise ValueError("title_break must contain at most one newline")
+        if any(not line.strip() for line in value.split("\n")):
+            raise ValueError("title_break lines must not be empty")
+        return value
+
+    @field_validator("script")
+    @classmethod
+    def _validate_script(cls, value: str) -> str:
+        if PINYIN_ANNOTATION_PATTERN.search(value):
+            raise ValueError("script must not contain pinyin annotations")
+        ending = value.strip()[-40:]
+        matched = [term for term in INTERACTIVE_ENDING_PATTERNS if term in ending]
+        if matched:
+            raise ValueError("script ending must not contain interactive instructions")
+        return value
+
     @field_validator("hashtags")
     @classmethod
     def _clean_hashtags(cls, value: list[str]) -> list[str]:
         cleaned: list[str] = []
         for item in value:
-            text = str(item).strip()
+            text = str(item).strip().lstrip("#").strip()
             if not text:
                 continue
             cleaned.append(text)
         return cleaned[:5]
+
+    @model_validator(mode="after")
+    def _validate_tts_matches_script(self) -> "DraftVideoExportPayload":
+        tts_without_annotations = PINYIN_ANNOTATION_PATTERN.sub("", self.tts_script)
+        if _compact_text(tts_without_annotations) != _compact_text(self.script):
+            raise ValueError("tts_script must match script except for pinyin annotations")
+        return self
 
 
 class DraftVideoExportRecord(BaseModel):
@@ -175,3 +235,7 @@ class DraftVideoExportListResponse(BaseModel):
     page: int = Field(ge=1)
     page_size: int = Field(ge=1, le=100)
     total: int = Field(ge=0)
+
+
+def _compact_text(value: str) -> str:
+    return re.sub(r"\s+", "", value)

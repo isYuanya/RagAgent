@@ -784,12 +784,8 @@ function DraftVideoExportPanel({ draft }: { draft: DraftDetail }) {
               <div className="text-xs text-muted-foreground">
                 {selected.model ? `模型：${selected.model}` : "模型：未记录"}
               </div>
-              <div className="flex flex-wrap gap-1">
-                {selected.result.hashtags.map((tag) => (
-                  <Badge key={tag} variant="outline">
-                    {tag}
-                  </Badge>
-                ))}
+              <div className="text-xs text-muted-foreground">
+                话题：{selected.result.hashtags.join(", ") || "无"}
               </div>
               <div className="flex gap-2 pt-1">
                 <Button size="sm" variant="outline" onClick={() => handleCopy(selected)}>
