@@ -1,3 +1,5 @@
+from typing import Any
+
 from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.common import CopyContext, RiskWarning
@@ -63,6 +65,7 @@ class CopyAssetSummary(CopyContext):
     reviewed_analysis: CopyAnalysisResponse | None = None
     storage_backend: str = Field(default="memory", description="当前资产来源：postgres、redis 或 memory。")
     collection_ids: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class CopyAssetListResponse(BaseModel):

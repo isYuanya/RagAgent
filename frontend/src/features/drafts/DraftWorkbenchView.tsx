@@ -1,6 +1,7 @@
 import * as React from "react";
 import {
   Archive,
+  CheckCircle2,
   ChevronDown,
   ChevronUp,
   FileClock,
@@ -33,6 +34,7 @@ import {
   acceptComposition,
   acceptRecommendation,
   addDraftItem,
+  approveDraft,
   archiveDraft,
   createAutoComposition,
   createDraft,
@@ -73,7 +75,7 @@ import type {
 
 const STATUS_LABELS: Record<DraftStatus, string> = {
   draft: "编辑中",
-  ready: "可进入后续",
+  ready: "已审批通过",
   archived: "已归档"
 };
 
@@ -103,6 +105,7 @@ export function DraftWorkbenchView({
   const [detailLoading, setDetailLoading] = React.useState(false);
   const [draftForm, setDraftForm] = React.useState<DraftForm>(emptyDraftForm());
   const [savingDraft, setSavingDraft] = React.useState(false);
+  const [approvalBusy, setApprovalBusy] = React.useState(false);
   const [creatingDraft, setCreatingDraft] = React.useState(false);
   const [archiving, setArchiving] = React.useState<DraftSummary | null>(null);
   const [archiveBusy, setArchiveBusy] = React.useState(false);
@@ -248,6 +251,29 @@ export function DraftWorkbenchView({
     }
   }
 
+  async function handleApproveDraft() {
+    if (!detail) return;
+    setApprovalBusy(true);
+    try {
+      const response = await approveDraft(detail.id);
+      applyDetail(response.draft);
+      setDraftForm(draftToForm(response.draft));
+      await loadDrafts(response.draft.id);
+      const fragmentCount = response.fragment_extraction.fragment_count;
+      const resultLabel =
+        response.fragment_extraction.status === "created"
+          ? `已拆解 ${fragmentCount} 个片段`
+          : response.fragment_extraction.status === "skipped"
+            ? "片段已存在，已跳过重复拆解"
+            : response.fragment_extraction.message || "片段拆解失败";
+      toast.success(`审批通过，已进入知识库。${resultLabel}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "审批通过失败");
+    } finally {
+      setApprovalBusy(false);
+    }
+  }
+
   function applyDetail(updated: DraftDetail) {
     setDetail(updated);
     setDrafts((current) =>
@@ -288,7 +314,7 @@ export function DraftWorkbenchView({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="draft">编辑中</SelectItem>
-                <SelectItem value="ready">可进入后续</SelectItem>
+                <SelectItem value="ready">已审批通过</SelectItem>
                 <SelectItem value="archived">已归档</SelectItem>
                 <SelectItem value="all">全部</SelectItem>
               </SelectContent>
@@ -311,8 +337,10 @@ export function DraftWorkbenchView({
               draft={detail}
               form={draftForm}
               saving={savingDraft}
+              approving={approvalBusy}
               onFormChange={setDraftForm}
               onSaveDraft={handleSaveDraft}
+              onApproveDraft={handleApproveDraft}
               onDetailChange={handleDetailChange}
             />
           ) : (
@@ -452,18 +480,26 @@ function DraftEditor({
   draft,
   form,
   saving,
+  approving,
   onFormChange,
   onSaveDraft,
+  onApproveDraft,
   onDetailChange
 }: {
   draft: DraftDetail;
   form: DraftForm;
   saving: boolean;
+  approving: boolean;
   onFormChange: (form: DraftForm) => void;
   onSaveDraft: () => void;
+  onApproveDraft: () => void;
   onDetailChange: (draft: DraftDetail) => void;
 }) {
   const [previewExpanded, setPreviewExpanded] = React.useState(false);
+  const canApprove =
+    draft.status !== "archived" &&
+    draft.status !== "ready" &&
+    Boolean(draft.current_text.trim());
 
   return (
     <div className="flex h-full flex-col">
@@ -475,10 +511,16 @@ function DraftEditor({
               {draft.id}
             </div>
           </div>
-          <Button onClick={onSaveDraft} disabled={saving}>
-            {saving ? <Loader2 className="animate-spin" /> : <Save />}
-            保存信息
-          </Button>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button onClick={onApproveDraft} disabled={!canApprove || approving}>
+              {approving ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}
+              审批通过
+            </Button>
+            <Button onClick={onSaveDraft} disabled={saving}>
+              {saving ? <Loader2 className="animate-spin" /> : <Save />}
+              保存信息
+            </Button>
+          </div>
         </div>
 
         <div className="grid gap-3 md:grid-cols-2">

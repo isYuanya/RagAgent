@@ -9,6 +9,18 @@ from app.services.knowledge import reset_knowledge_store
 client = TestClient(app)
 
 
+class _FragmentLLM:
+    def complete(self, prompt: str) -> str:
+        return (
+            '{"fragments":['
+            '{"fragment_text":"Approved hook","fragment_role":"hook","position":"opening",'
+            '"reason":"strong opening","source_quality":"high","risk_level":"low","confidence":0.95},'
+            '{"fragment_text":"Approved proof","fragment_role":"proof","position":"middle",'
+            '"reason":"credible proof","source_quality":"high","risk_level":"low","confidence":0.9}'
+            "]}"
+        )
+
+
 def setup_function() -> None:
     reset_copy_asset_store()
     reset_knowledge_store()
@@ -146,3 +158,72 @@ def test_draft_item_requires_source_fragment_or_text() -> None:
     )
     assert manual_response.status_code == 200
     assert manual_response.json()["current_text"] == "Manual sentence"
+
+
+def test_approve_draft_creates_raw_copy_and_fragments(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.services.fragment_extraction.get_llm_client",
+        lambda: _FragmentLLM(),
+    )
+    create_response = client.post(
+        "/api/drafts",
+        json={
+            "title": "Approved draft",
+            "audience": "new users",
+            "platform": "xhs",
+            "purpose": "conversion",
+        },
+    )
+    assert create_response.status_code == 200
+    draft_id = create_response.json()["id"]
+    add_response = client.post(
+        f"/api/drafts/{draft_id}/items",
+        json={"edited_text": "Approved hook\n\nApproved proof", "role": "hook", "position": "opening"},
+    )
+    assert add_response.status_code == 200
+
+    approve_response = client.post(f"/api/drafts/{draft_id}/approve")
+    assert approve_response.status_code == 200
+    payload = approve_response.json()
+    assert payload["draft"]["status"] == "ready"
+    assert payload["raw_copy"]["status"] == "approved"
+    assert payload["raw_copy"]["source_text"] == "Approved hook\n\nApproved proof"
+    assert payload["raw_copy"]["metadata"]["source_type"] == "draft"
+    assert payload["raw_copy"]["metadata"]["source_draft_id"] == draft_id
+    assert payload["fragment_extraction"]["status"] == "created"
+    assert payload["fragment_extraction"]["fragment_count"] == 2
+    assert payload["draft"]["metadata"]["knowledge_ingest"]["raw_copy_id"] == payload["raw_copy"]["id"]
+
+    raw_response = client.get("/api/knowledge/raw-copies")
+    assert raw_response.status_code == 200
+    assert raw_response.json()["total"] == 1
+
+    fragments_response = client.get(
+        f"/api/knowledge/fragments?source_copy_id={payload['raw_copy']['id']}"
+    )
+    assert fragments_response.status_code == 200
+    assert fragments_response.json()["total"] == 2
+
+
+def test_approve_draft_is_idempotent(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.services.fragment_extraction.get_llm_client",
+        lambda: _FragmentLLM(),
+    )
+    draft = client.post("/api/drafts", json={"title": "Idempotent draft"}).json()
+    draft_id = draft["id"]
+    client.post(f"/api/drafts/{draft_id}/items", json={"edited_text": "Reusable approved text"})
+
+    first = client.post(f"/api/drafts/{draft_id}/approve")
+    second = client.post(f"/api/drafts/{draft_id}/approve")
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json()["raw_copy"]["id"] == first.json()["raw_copy"]["id"]
+    assert second.json()["fragment_extraction"]["status"] == "skipped"
+    assert client.get("/api/knowledge/raw-copies").json()["total"] == 1
+
+
+def test_approve_empty_draft_fails() -> None:
+    draft = client.post("/api/drafts", json={"title": "Empty draft"}).json()
+    response = client.post(f"/api/drafts/{draft['id']}/approve")
+    assert response.status_code == 409

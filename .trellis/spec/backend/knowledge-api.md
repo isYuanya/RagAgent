@@ -306,6 +306,7 @@ POST   /api/drafts/{draft_id}/items
 PATCH  /api/drafts/{draft_id}/items/reorder
 PATCH  /api/drafts/{draft_id}/items/{item_id}
 DELETE /api/drafts/{draft_id}/items/{item_id}
+POST   /api/drafts/{draft_id}/approve
 
 POST   /api/drafts/{draft_id}/versions
 GET    /api/drafts/{draft_id}/versions
@@ -331,6 +332,10 @@ draft_versions
 - Adding an item accepts either `source_fragment_id` or `edited_text`.
 - When `source_fragment_id` is provided, backend copies fragment text, role, position, and source copy id into first-class draft item fields.
 - Frontend should use returned `DraftDetail` after every write to refresh local state.
+- `POST /api/drafts/{draft_id}/approve` means "approval passed" in product language and sets draft `status = ready`.
+- Draft approval creates or reuses an approved raw copy asset from `draft.current_text`, preserving draft provenance in `raw_copy.metadata.source_type = draft`, `source_draft_id`, and `source_draft_title`.
+- Draft approval records `metadata.knowledge_ingest.raw_copy_id` on the draft and must be idempotent; repeated approvals reuse that raw copy and rely on fragment extraction idempotency.
+- Draft approval triggers the existing approved-copy fragment extraction path, so generated fragments keep first-class `source_copy_id`.
 
 ### 4. Validation & Error Matrix
 
@@ -342,15 +347,20 @@ draft_versions
 | Missing source fragment | `404` |
 | Delete draft | `204`, draft status becomes `archived` |
 | Delete draft item | `204`, current draft no longer includes that item |
+| Approve missing draft | `404` |
+| Approve draft with empty `current_text` | `409` |
+| Approve draft with existing `metadata.knowledge_ingest.raw_copy_id` | Reuse the raw copy and skip duplicate fragment creation |
 | Database unavailable in tests/local fallback | Service falls back to in-memory store where implemented |
 
 ### 5. Good/Base/Bad Cases
 
 - Good: create an empty draft, add selected fragments one by one, edit item text, reorder items, then save a version snapshot.
 - Good: a saved version remains readable after one current draft item is deleted.
+- Good: approving a finished draft creates one approved raw copy and fragments that are retrievable through `/api/knowledge/fragments?source_copy_id=...`.
 - Base: manually typed draft item can be added with `edited_text` and no source fragment.
 - Bad: do not expose raw UUIDs as the only user-visible content. Use `edited_text`, `original_fragment_text`, or source copy display fields where available.
 - Bad: do not treat archived drafts as deleted data; they are hidden from the default list but still retrievable.
+- Bad: do not create a separate draft-fragment source model for MVP; use raw copy projection so fragment retrieval remains consistent.
 
 ### 6. Tests Required
 
@@ -358,6 +368,8 @@ draft_versions
 - API test for adding a fragment-backed item and preserving copied source fields.
 - API test for item edit, reorder, and delete.
 - API test for manual version save/list/detail and immutable snapshots after current item deletion.
+- API test for draft approval creating raw copy plus fragments.
+- API test for draft approval idempotency and empty-draft failure.
 - Static check: `python -m ruff check app tests alembic`.
 - Full backend regression: `python -m pytest`.
 
@@ -388,6 +400,21 @@ DELETE /api/drafts/{draft_id} sets status = archived and preserves version histo
 ```
 
 Draft provenance must stay in first-class fields so later AI diagnosis, recommendation, and source display can use it reliably.
+
+#### Wrong
+
+```text
+POST /api/drafts/{draft_id}/approve creates fragments with source_copy_id = draft_id.
+```
+
+#### Correct
+
+```text
+POST /api/drafts/{draft_id}/approve creates/reuses an approved raw copy first,
+then extracts fragments with source_copy_id = raw_copy.id.
+```
+
+Approved drafts enter the knowledge base through the raw-copy projection so fragment retrieval, provenance, and source display stay consistent.
 
 ## Scenario: Next-Sentence Recommendations
 

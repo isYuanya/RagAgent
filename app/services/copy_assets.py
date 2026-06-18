@@ -277,9 +277,12 @@ def create_copy_asset(
     payload: CopyAnalysisRequest,
     analysis: CopyAnalysisResponse | None,
     collection_ids: list[str] | None = None,
+    *,
+    status_override: str | None = None,
+    metadata: dict | None = None,
 ) -> CopyAssetSummary:
     asset_id = str(uuid4())
-    status = _initial_asset_status(analysis)
+    status = status_override or _initial_asset_status(analysis)
     asset = CopyAssetSummary(
         id=asset_id,
         source_text=payload.source_text,
@@ -299,6 +302,7 @@ def create_copy_asset(
         auto_analysis=analysis,
         reviewed_analysis=None,
         collection_ids=collection_ids or [],
+        metadata=metadata or {},
     )
     db_persisted = _persist_asset_to_db(asset, collection_ids or [])
     if db_persisted:
@@ -497,6 +501,7 @@ def _source_to_asset(db, source: CopySource) -> CopyAssetSummary:
         else None,
         storage_backend="postgres",
         collection_ids=collection_ids,
+        metadata=metadata.get("metadata") or {},
     )
 
 
@@ -548,6 +553,7 @@ def _asset_metadata(asset: CopyAssetSummary) -> dict:
         if asset.reviewed_analysis
         else None,
         "collection_ids": asset.collection_ids,
+        "metadata": asset.metadata,
         "deleted": False,
     }
 

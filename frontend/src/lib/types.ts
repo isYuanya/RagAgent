@@ -278,6 +278,12 @@ export type DraftVersionDetail = DraftVersionSummary & {
   items: DraftItemSnapshot[];
 };
 
+export type DraftApprovalResponse = {
+  draft: DraftDetail;
+  raw_copy: CopyAsset;
+  fragment_extraction: FragmentExtractionResult;
+};
+
 export type ReferenceFragmentSummary = {
   id: string;
   text: string;

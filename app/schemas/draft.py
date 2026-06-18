@@ -2,6 +2,9 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.schemas.copy import CopyAssetSummary
+from app.schemas.knowledge import FragmentExtractionResult
+
 
 DraftStatus = Literal["draft", "ready", "archived"]
 
@@ -122,3 +125,9 @@ class DraftVersionSummary(BaseModel):
 
 class DraftVersionDetail(DraftVersionSummary):
     items: list[DraftItemSnapshot] = Field(default_factory=list)
+
+
+class DraftApprovalResponse(BaseModel):
+    draft: DraftDetail
+    raw_copy: CopyAssetSummary
+    fragment_extraction: FragmentExtractionResult

@@ -14,6 +14,7 @@ import type {
   FragmentFilters,
   DraftCreate,
   DraftDetail,
+  DraftApprovalResponse,
   DraftItemCreate,
   DraftItemReorder,
   DraftItemUpdate,
@@ -381,6 +382,10 @@ export function updateDraft(
 
 export function archiveDraft(id: string): Promise<void> {
   return deleteResource(`${draftsBase}/${id}`, "归档草稿失败");
+}
+
+export function approveDraft(id: string): Promise<DraftApprovalResponse> {
+  return writeJson(`${draftsBase}/${id}/approve`, "POST", {}, "审批通过失败");
 }
 
 export function addDraftItem(

@@ -228,3 +228,47 @@ await fetch("http://127.0.0.1:8002/api/assistant/runs", { method: "POST" });
 const run = await createSmartCompositionRun({ mode, brief });
 setSelectedRun(run);
 ```
+
+## Scenario: Draft Approval API Layer
+
+### 1. Scope / Trigger
+
+- Trigger: frontend work that touches draft approval from the draft workbench.
+- All draft approval calls must go through `frontend/src/lib/api.ts`.
+
+### 2. Signatures
+
+```ts
+approveDraft(id: string): Promise<DraftApprovalResponse>
+```
+
+Response shape:
+
+```ts
+type DraftApprovalResponse = {
+  draft: DraftDetail;
+  raw_copy: CopyAsset;
+  fragment_extraction: FragmentExtractionResult;
+};
+```
+
+### 3. Contracts
+
+- UI copy says `审批通过`, while the backend draft status remains `ready`.
+- The draft workbench must replace local draft state with `response.draft` after approval.
+- The button should be disabled for archived drafts, already-ready drafts, empty current text, and in-flight approval.
+- The success toast may summarize `fragment_extraction.status` and `fragment_count`.
+
+### 4. Validation & Error Matrix
+
+| Condition | Backend | Frontend handling |
+|---|---|---|
+| Missing draft | 404 | backend detail -> toast |
+| Empty draft text | 409 | backend detail -> toast |
+| Approval success | 200 | refresh detail/list from returned draft |
+| Existing fragments | 200 `fragment_extraction.status = skipped` | show success without duplicate warning |
+
+### 5. Tests Required
+
+- `npm run build` must pass.
+- Backend `tests/test_drafts_api.py` must cover the endpoint behavior.

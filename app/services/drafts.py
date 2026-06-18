@@ -11,6 +11,7 @@ from app.models.draft import Draft as DraftModel
 from app.models.draft import DraftItem as DraftItemModel
 from app.models.draft import DraftVersion as DraftVersionModel
 from app.schemas.draft import (
+    DraftApprovalResponse,
     DraftCreate,
     DraftDetail,
     DraftItem,
@@ -25,7 +26,11 @@ from app.schemas.draft import (
     DraftVersionDetail,
     DraftVersionSummary,
 )
+from app.schemas.copy import CopyAnalysisRequest
 from app.services import knowledge
+from app.services.copy_assets import create_copy_asset, get_copy_asset
+from app.services.copy_postprocess import sync_imported_asset_to_knowledge
+from app.services.fragment_extraction import extract_fragments_for_asset_id
 
 
 class DraftNotFoundError(Exception):
@@ -37,6 +42,10 @@ class DraftItemNotFoundError(Exception):
 
 
 class SourceFragmentNotFoundError(Exception):
+    pass
+
+
+class DraftEmptyError(Exception):
     pass
 
 
@@ -122,6 +131,31 @@ def update_draft(draft_id: str, payload: DraftUpdate) -> DraftDetail | None:
 def archive_draft(draft_id: str) -> bool:
     payload = DraftUpdate(status="archived")
     return update_draft(draft_id, payload) is not None
+
+
+def approve_draft(draft_id: str) -> DraftApprovalResponse:
+    draft = get_draft(draft_id)
+    if draft is None:
+        raise DraftNotFoundError()
+    if not draft.current_text.strip():
+        raise DraftEmptyError()
+
+    raw_copy = _get_or_create_approved_raw_copy(draft)
+    fragment_result = extract_fragments_for_asset_id(raw_copy.id)
+    sync_imported_asset_to_knowledge(raw_copy)
+
+    updated_metadata = _approved_metadata(draft.metadata, raw_copy.id, fragment_result.model_dump())
+    updated = update_draft(
+        draft.id,
+        DraftUpdate(status="ready", metadata=updated_metadata),
+    )
+    if updated is None:
+        raise DraftNotFoundError()
+    return DraftApprovalResponse(
+        draft=updated,
+        raw_copy=raw_copy,
+        fragment_extraction=fragment_result,
+    )
 
 
 def replace_draft_text(
@@ -655,6 +689,49 @@ def _get_fragment_or_none(fragment_id: str | None):
     if fragment_id is None:
         return None
     return knowledge.get_fragment(fragment_id)
+
+
+def _get_or_create_approved_raw_copy(draft: DraftDetail):
+    existing_id = _knowledge_ingest(draft.metadata).get("raw_copy_id")
+    if isinstance(existing_id, str):
+        existing = get_copy_asset(existing_id)
+        if existing is not None:
+            return existing
+    return create_copy_asset(
+        CopyAnalysisRequest(
+            source_text=draft.current_text,
+            platform=draft.platform,
+            audience=draft.audience,
+            purpose=draft.purpose,
+        ),
+        None,
+        status_override="approved",
+        metadata={
+            "source_type": "draft",
+            "source_draft_id": draft.id,
+            "source_draft_title": draft.title,
+        },
+    )
+
+
+def _approved_metadata(
+    metadata: dict,
+    raw_copy_id: str,
+    fragment_result: dict,
+) -> dict:
+    updated = dict(metadata or {})
+    updated["knowledge_ingest"] = {
+        **_knowledge_ingest(updated),
+        "status": "approved",
+        "raw_copy_id": raw_copy_id,
+        "fragment_extraction": fragment_result,
+    }
+    return updated
+
+
+def _knowledge_ingest(metadata: dict) -> dict:
+    value = (metadata or {}).get("knowledge_ingest")
+    return value if isinstance(value, dict) else {}
 
 
 def _detail_from_model(row: DraftModel | None) -> DraftDetail | None:

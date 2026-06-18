@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 
 from app.schemas.draft import (
+    DraftApprovalResponse,
     DraftCreate,
     DraftDetail,
     DraftItemCreate,
@@ -60,6 +61,16 @@ def update_draft(draft_id: str, payload: DraftUpdate):
 def archive_draft(draft_id: str):
     if not drafts.archive_draft(draft_id):
         raise HTTPException(status_code=404, detail="Draft not found")
+
+
+@router.post("/{draft_id}/approve", response_model=DraftApprovalResponse)
+def approve_draft(draft_id: str):
+    try:
+        return drafts.approve_draft(draft_id)
+    except drafts.DraftNotFoundError:
+        raise HTTPException(status_code=404, detail="Draft not found") from None
+    except drafts.DraftEmptyError:
+        raise HTTPException(status_code=409, detail="Draft has no text to approve") from None
 
 
 @router.post("/{draft_id}/items", response_model=DraftDetail)
