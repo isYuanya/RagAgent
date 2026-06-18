@@ -237,3 +237,36 @@ Implemented asynchronous next-sentence recommendation APIs, accepted recommendat
 ### Next Steps
 
 - None - task complete
+
+
+## Session 8: LangGraph 智能组稿改造
+
+**Date**: 2026-06-18
+**Task**: LangGraph 智能组稿改造
+**Branch**: `master`
+
+### Summary
+
+将智能组稿助手改为 LangGraph StateGraph 编排，支持 guided interrupt/resume 确认素材、候选稿和改写稿；补齐前端确认 API、文档规格和回归测试。验证通过 ruff、全量 pytest、frontend build。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `12ae0ca` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

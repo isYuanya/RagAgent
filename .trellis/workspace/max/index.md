@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 7
-- **Last Active**: 2026-06-17
+- **Total Sessions**: 8
+- **Last Active**: 2026-06-18
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~239 | Active |
+| `journal-1.md` | ~272 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 8 | 2026-06-18 | LangGraph 智能组稿改造 | `12ae0ca` | `master` |
 | 7 | 2026-06-17 | 智能组稿助手工作流 | `43d59b2` | `master` |
 | 6 | 2026-06-17 | Phase 4 next sentence recommendations | `98eb71b` | `master` |
 | 5 | 2026-06-17 | Phase 3 draft workspace backend | `6299d35` | `master` |
