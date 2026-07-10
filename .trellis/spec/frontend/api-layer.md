@@ -15,8 +15,13 @@ typed function to `lib/api.ts` instead.
 
 ```ts
 export const apiBase =
-  import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8002";
+  import.meta.env.VITE_API_BASE_URL ?? "";
 ```
+
+Default calls are same-origin `/api/...` requests. In local development, Vite
+proxies `/api` to the FastAPI backend (`http://127.0.0.1:8002`). Set
+`VITE_API_BASE_URL` only when the frontend must call an absolute backend URL
+directly.
 
 - All response/request shapes are `export type` in `lib/types.ts`, **snake_case**
   (mirrors backend; no camelCase conversion layer).
@@ -75,6 +80,75 @@ Some backend actions create a `TaskResponse` and finish later, then expose their
 typed result through `GET /api/tasks/{task_id}`. Frontend code should keep the
 endpoint-specific request/accept functions in `lib/api.ts`, reuse `fetchTask`
 for polling, and parse `task.result` in the feature component before rendering.
+
+## Scenario: Frontend API Base and Dev Proxy
+
+### 1. Scope / Trigger
+
+- Trigger: any change to `frontend/src/lib/api.ts`, `frontend/vite.config.ts`,
+  API deployment wiring, or local backend port assumptions.
+
+### 2. Signatures
+
+```ts
+export const apiBase = import.meta.env.VITE_API_BASE_URL ?? "";
+```
+
+Vite dev proxy:
+
+```ts
+server: {
+  proxy: {
+    "/api": "http://127.0.0.1:8002"
+  }
+}
+```
+
+### 3. Contracts
+
+- Default API calls are same-origin `/api/...`.
+- Local dev routes `/api/...` through the Vite proxy to FastAPI on `8002`.
+- `VITE_API_BASE_URL` is optional and only needed when the frontend must call an
+  absolute backend origin directly.
+- API wrapper functions must keep endpoint paths as `${apiBase}/api/...`.
+
+### 4. Validation & Error Matrix
+
+| Condition | Expected behavior |
+|---|---|
+| Backend running on `8002` and Vite running on `5173` | `GET http://localhost:5173/api/drafts` returns 200 |
+| `VITE_API_BASE_URL` is unset | Browser requests `/api/...` on the frontend origin |
+| `VITE_API_BASE_URL` is set | Browser requests `${VITE_API_BASE_URL}/api/...` |
+| Vite proxy points to the wrong port | Workbench may show browser-level `Failed to fetch` or proxy errors |
+
+### 5. Good/Base/Bad Cases
+
+- Good: draft workbench calls `fetchDrafts()`, which requests `/api/drafts` in
+  dev and lets Vite proxy it to `8002`.
+- Base: production-like deployments set `VITE_API_BASE_URL` when no same-origin
+  reverse proxy exists.
+- Bad: hardcode `http://127.0.0.1:8002` inside feature components or individual
+  API functions.
+
+### 6. Tests Required
+
+- `npm run build` must pass.
+- With backend running, `Invoke-WebRequest http://localhost:5173/api/drafts
+  -UseBasicParsing` must return 200.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+await fetch("http://127.0.0.1:8002/api/drafts");
+```
+
+#### Correct
+
+```ts
+await fetch(`${apiBase}/api/drafts`);
+```
 
 Current task-backed contracts:
 

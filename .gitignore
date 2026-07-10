@@ -14,3 +14,7 @@ frontend/dist/
 frontend/*.tsbuildinfo
 .idea/db-forest-config.xml
 .claude/settings.local.json
+
+.idea/
+*.tsbuildinfo
+.trellis/tasks/

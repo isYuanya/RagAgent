@@ -10,7 +10,8 @@ cd C:\RagAgent
 
 ## 1. 必须启动的服务
 sudo service redis-server start
-
+C:\RagAgent\.venv\Scripts\python.exe C:\RagAgent\scripts\worker.py
+C:\RagAgent\.venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8002
 ### 1.1 后端 API
 
 后端默认地址：

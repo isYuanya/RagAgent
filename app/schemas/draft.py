@@ -212,9 +212,8 @@ class DraftVideoExportPayload(BaseModel):
 
     @model_validator(mode="after")
     def _validate_tts_matches_script(self) -> "DraftVideoExportPayload":
-        tts_without_annotations = PINYIN_ANNOTATION_PATTERN.sub("", self.tts_script)
-        if _compact_text(tts_without_annotations) != _compact_text(self.script):
-            raise ValueError("tts_script must match script except for pinyin annotations")
+        if not _tts_matches_script_with_pinyin_replacements(self.tts_script, self.script):
+            raise ValueError("tts_script must match script except pinyin replacements for single characters")
         return self
 
 
@@ -239,3 +238,26 @@ class DraftVideoExportListResponse(BaseModel):
 
 def _compact_text(value: str) -> str:
     return re.sub(r"\s+", "", value)
+
+
+def _tts_matches_script_with_pinyin_replacements(tts_script: str, script: str) -> bool:
+    tts = _compact_text(tts_script)
+    source = _compact_text(script)
+    tts_index = 0
+    source_index = 0
+
+    while tts_index < len(tts):
+        annotation = PINYIN_ANNOTATION_PATTERN.match(tts, tts_index)
+        if annotation is not None:
+            if source_index >= len(source):
+                return False
+            tts_index = annotation.end()
+            source_index += 1
+            continue
+
+        if source_index >= len(source) or tts[tts_index] != source[source_index]:
+            return False
+        tts_index += 1
+        source_index += 1
+
+    return source_index == len(source)

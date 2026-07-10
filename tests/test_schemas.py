@@ -82,3 +82,24 @@ def test_draft_video_export_payload_rejects_tts_rewrite() -> None:
         DraftVideoExportPayload.model_validate(
             _valid_video_payload(tts_script="这是另一段配音稿，内容已经被改写。")
         )
+
+
+def test_draft_video_export_payload_accepts_tts_pinyin_replacement() -> None:
+    payload = DraftVideoExportPayload.model_validate(
+        _valid_video_payload(
+            script="你的选择越还越多，先别急着定。",
+            tts_script="你的选择越[huán]越多，先别急着定。",
+        )
+    )
+
+    assert payload.tts_script == "你的选择越[huán]越多，先别急着定。"
+
+
+def test_draft_video_export_payload_rejects_tts_pinyin_after_character() -> None:
+    with pytest.raises(ValidationError):
+        DraftVideoExportPayload.model_validate(
+            _valid_video_payload(
+                script="你的选择越还越多，先别急着定。",
+                tts_script="你的选择越还[huán]越多，先别急着定。",
+            )
+        )

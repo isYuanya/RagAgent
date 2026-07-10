@@ -51,7 +51,7 @@ import type {
 } from "./types";
 
 export const apiBase =
-  import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8002";
+  import.meta.env.VITE_API_BASE_URL ?? "";
 
 async function parseJson(response: Response) {
   try {

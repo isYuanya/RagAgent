@@ -1,7 +1,9 @@
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.services import draft_video_export
 from app.services.copy_assets import reset_copy_asset_store
+from app.services.draft_video_export import reset_draft_video_export_store
 from app.services.drafts import reset_draft_store
 from app.services.knowledge import reset_knowledge_store
 
@@ -41,8 +43,22 @@ class _InvalidVideoExportLLM:
         return '{"title":"这是一个超过十六个字的视频标题会失败","hashtags":[]}'
 
 
+class _LegacyPinyinVideoExportLLM:
+    model = "fake-video-export-model"
+
+    def complete(self, prompt: str) -> str:
+        return (
+            '{"title":"还款节奏","title_break":"还款\\n节奏",'
+            '"description":"先理清还款节奏，再根据自己的收入安排支出。",'
+            '"script":"你的选择越还越多，先别急着定。",'
+            '"tts_script":"你的选择越还[huán]越多，先别急着定。",'
+            '"hashtags":["还款","资金规划"]}'
+        )
+
+
 def setup_function() -> None:
     reset_copy_asset_store()
+    reset_draft_video_export_store()
     reset_knowledge_store()
     reset_draft_store()
 
@@ -312,6 +328,32 @@ def test_draft_video_export_empty_draft_fails(monkeypatch) -> None:
     assert "Draft has no text" in payload["error"]
 
 
+def test_draft_video_export_normalizes_legacy_tts_pinyin_format(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.services.draft_video_export.get_llm_client",
+        lambda: _LegacyPinyinVideoExportLLM(),
+    )
+    monkeypatch.setattr(
+        "app.api.routes.drafts.enqueue_draft_video_export",
+        lambda draft_id: __import__(
+            "app.services.draft_video_export_jobs",
+            fromlist=["run_draft_video_export_task"],
+        ).run_draft_video_export_task({"draft_id": draft_id}),
+    )
+    draft = client.post("/api/drafts", json={"title": "拼音草稿"}).json()
+    client.post(
+        f"/api/drafts/{draft['id']}/items",
+        json={"edited_text": "你的选择越还越多，先别急着定。"},
+    )
+
+    response = client.post(f"/api/drafts/{draft['id']}/video-exports")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "finished"
+    assert payload["result"]["result"]["tts_script"] == "你的选择越[huán]越多，先别急着定。"
+
+
 def test_draft_video_export_invalid_llm_json_fails(monkeypatch) -> None:
     monkeypatch.setattr(
         "app.services.draft_video_export.get_llm_client",
@@ -334,3 +376,25 @@ def test_draft_video_export_invalid_llm_json_fails(monkeypatch) -> None:
     assert payload["status"] == "failed"
     assert "invalid video export JSON" in payload["error"]
     assert client.get(f"/api/drafts/{draft_id}/video-exports").json()["total"] == 0
+
+
+def test_invalid_persisted_video_export_history_record_is_skipped() -> None:
+    class Row:
+        id = "00000000-0000-0000-0000-000000000001"
+        draft_id = "00000000-0000-0000-0000-000000000002"
+        status = "finished"
+        result_json = {
+            "title": "Legacy",
+            "title_break": "Legacy",
+            "description": "Legacy persisted video export record.",
+            "script": "Original script text",
+            "tts_script": "Different TTS text",
+            "hashtags": ["legacy"],
+        }
+        model = "legacy-model"
+        error = None
+        metadata_json = {}
+        created_at = None
+        updated_at = None
+
+    assert draft_video_export._record_from_model(Row()) is None
