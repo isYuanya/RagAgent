@@ -145,7 +145,7 @@ function KnowledgeStatsPanel({
     ["片段", stats?.fragments]
   ];
   return (
-    <div className="pointer-events-none fixed bottom-8 left-4 z-20 rounded-md border border-border bg-background/95 px-3 py-2 text-xs shadow-sm">
+    <div className="pointer-events-none fixed bottom-24 left-4 z-20 rounded-md border border-border bg-background/95 px-3 py-2 text-xs shadow-sm">
       <div className="mb-1 font-medium text-foreground">知识库资产</div>
       <div className="grid grid-cols-[auto_auto] gap-x-3 gap-y-1 text-muted-foreground">
         {items.map(([label, value]) => (
