@@ -196,6 +196,17 @@ Fragment provenance and ordering are first-class fields so filtering and future 
 - Fragment bulk delete request fields mirror fragment list filters plus optional
   `fragment_ids` and `confirm`. Preview uses `confirm=false`; destructive calls
   require `confirm=true`.
+- Semantic fragment retrieval uses `settings.embedding_model` and Milvus collection
+  `ragagent_fragments`. With Aliyun-compatible `text-embedding-v2`, keep
+  `OpenAIEmbeddings(check_embedding_ctx_length=False)` so raw strings are sent
+  to the provider instead of token arrays.
+- `ragagent_fragments` must use `id` as a `VARCHAR` primary key because vector
+  ids are stored as `fragment:<uuid>`, plus a 1536-dimensional `FLOAT_VECTOR`
+  field named `vector` for `text-embedding-v2`. The collection must also have a
+  COSINE vector index before loading/searching.
+- Operational vector rebuilds against `text-embedding-v2` must batch at 25
+  texts or fewer; use a smaller batch when provider latency or throttling is
+  observed.
 
 ## Copy Import Contract
 

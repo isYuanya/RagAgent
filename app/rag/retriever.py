@@ -43,6 +43,7 @@ class EmbeddingClient:
                 api_key=settings.openai_api_key,
                 base_url=settings.openai_base_url,
                 model=settings.embedding_model,
+                check_embedding_ctx_length=False,
             )
             return client.embed_documents(texts)
         except Exception as exc:
@@ -71,14 +72,28 @@ class MilvusVectorStore:
     def _ensure_collection(self) -> None:
         if self._client is None:
             return
-        if self._client.has_collection(self.collection_name):
-            return
-        self._client.create_collection(
-            collection_name=self.collection_name,
-            dimension=1536,
-            metric_type="COSINE",
-            auto_id=False,
-        )
+        if not self._client.has_collection(self.collection_name):
+            from pymilvus import DataType
+
+            schema = self._client.create_schema(auto_id=False, enable_dynamic_field=True)
+            schema.add_field("id", DataType.VARCHAR, is_primary=True, max_length=128)
+            schema.add_field("vector", DataType.FLOAT_VECTOR, dim=1536)
+            self._client.create_collection(
+                collection_name=self.collection_name,
+                schema=schema,
+                metric_type="COSINE",
+            )
+            index_params = self._client.prepare_index_params()
+            index_params.add_index(
+                field_name="vector",
+                index_type="AUTOINDEX",
+                metric_type="COSINE",
+            )
+            self._client.create_index(
+                collection_name=self.collection_name,
+                index_params=index_params,
+            )
+        self._client.load_collection(collection_name=self.collection_name)
 
     def upsert(self, documents: list[VectorDocument], vectors: list[list[float]]) -> bool:
         client = self._connect()
