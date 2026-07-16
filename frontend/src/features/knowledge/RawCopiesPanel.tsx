@@ -54,6 +54,7 @@ export function RawCopiesPanel({
   const [extractingId, setExtractingId] = React.useState<string | null>(null);
 
   const selected = items.find((x) => x.id === selectedId) ?? null;
+  const hasActiveFilter = collectionId !== ALL;
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -104,6 +105,10 @@ export function RawCopiesPanel({
   async function openBulkDelete(mode: "selected" | "filtered") {
     if (mode === "selected" && checkedIds.length === 0) {
       toast.error("请先选择要删除的文案");
+      return;
+    }
+    if (mode === "filtered" && !hasActiveFilter) {
+      toast.error("请先选择一个集合筛选，或使用删除所选");
       return;
     }
     setBulkDeleteBusy(true);
@@ -234,7 +239,7 @@ export function RawCopiesPanel({
               size="sm"
               variant="outline"
               onClick={() => void openBulkDelete("filtered")}
-              disabled={total === 0 || bulkDeleteBusy}
+              disabled={!hasActiveFilter || total === 0 || bulkDeleteBusy}
             >
               删除筛选结果
             </Button>

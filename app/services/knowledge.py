@@ -216,6 +216,8 @@ def bulk_delete_raw_copies(payload: RawCopyBulkDeleteRequest) -> KnowledgeBulkOp
             failed_count=1,
             errors=[{"id": "*", "error": "Bulk delete requires confirm=true."}],
         )
+    if _is_unfiltered_raw_copy_bulk_delete(payload):
+        return _unsafe_bulk_delete_response()
     candidates = _matching_raw_copy_candidates(payload)
 
     deleted: list[str] = []
@@ -238,6 +240,8 @@ def bulk_delete_raw_copies(payload: RawCopyBulkDeleteRequest) -> KnowledgeBulkOp
 
 
 def preview_bulk_delete_raw_copies(payload: RawCopyBulkDeleteRequest) -> KnowledgeBulkOperationResponse:
+    if _is_unfiltered_raw_copy_bulk_delete(payload):
+        return _unsafe_bulk_delete_response()
     candidates = _matching_raw_copy_candidates(payload)
     return KnowledgeBulkOperationResponse(
         matched_count=len(candidates),
@@ -263,6 +267,27 @@ def _matching_raw_copy_candidates(payload: RawCopyBulkDeleteRequest):
         allowed = set(payload.raw_copy_ids)
         candidates = [item for item in candidates if item.id in allowed]
     return [item for item in candidates if item.id not in _store.raw_deleted]
+
+
+def _is_unfiltered_raw_copy_bulk_delete(payload: RawCopyBulkDeleteRequest) -> bool:
+    return (
+        payload.collection_id is None
+        and payload.status is None
+        and payload.industry is None
+        and payload.platform is None
+        and payload.raw_copy_ids is None
+    )
+
+
+def _unsafe_bulk_delete_response() -> KnowledgeBulkOperationResponse:
+    return KnowledgeBulkOperationResponse(
+        matched_count=0,
+        deleted_count=0,
+        skipped_count=0,
+        failed_count=1,
+        item_ids=[],
+        errors=[{"id": "*", "error": "Bulk delete requires a filter or explicit item ids."}],
+    )
 
 
 def list_analyses(page: int = 1, page_size: int = 20) -> AnalysisListResponse:

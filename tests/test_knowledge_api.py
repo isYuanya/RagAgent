@@ -313,6 +313,33 @@ def test_bulk_delete_raw_copies_matches_beyond_first_100() -> None:
     assert client.get("/api/knowledge/raw-copies").json()["total"] == 0
 
 
+def test_bulk_delete_raw_copies_rejects_unfiltered_delete_all() -> None:
+    for index in range(3):
+        response = client.post(
+            "/api/knowledge/raw-copies",
+            json={"source_text": f"safe raw {index}"},
+        )
+        assert response.status_code == 200
+
+    preview = client.post(
+        "/api/knowledge/raw-copies/bulk-delete/preview",
+        json={},
+    )
+    assert preview.status_code == 200
+    assert preview.json()["failed_count"] == 1
+    assert preview.json()["matched_count"] == 0
+
+    response = client.post(
+        "/api/knowledge/raw-copies/bulk-delete",
+        json={"confirm": True},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["failed_count"] == 1
+    assert payload["deleted_count"] == 0
+    assert client.get("/api/knowledge/raw-copies").json()["total"] == 3
+
+
 def test_copy_import_populates_raw_copy_and_analysis_libraries(monkeypatch) -> None:
     monkeypatch.setattr("app.services.copy_analysis.get_llm_client", lambda: FakeLLMClient())
     monkeypatch.setattr("app.api.routes.copy.enqueue_copy_import", lambda csv_text, collection_ids=None: __import__(

@@ -62,6 +62,9 @@ knowledge_templates
   `BulkOperationResponse` shape with `matched_count` and no deletion side
   effects. Confirmed deletion must match all filtered candidates, not only the
   current page or first 100 rows.
+- Bulk raw-copy deletion must reject an unfiltered request where
+  `collection_id`, `status`, `industry`, `platform`, and `raw_copy_ids` are all
+  absent. This prevents accidental "delete the whole raw-copy library" actions.
 - Templates accept optional source traceability:
 
 ```json
@@ -83,6 +86,7 @@ knowledge_templates
 | Database unavailable in local dev | Service falls back to in-memory store where implemented |
 | Bulk delete preview | `200`, `matched_count` reflects all filtered candidates, no rows deleted |
 | Bulk delete without `confirm=true` | `200` response with `failed_count = 1` and an explanatory error |
+| Bulk delete with no filters and no explicit IDs | `200` response with `failed_count = 1`, `matched_count = 0`, and no rows deleted |
 
 ### 5. Good/Base/Bad Cases
 
@@ -103,6 +107,8 @@ knowledge_templates
 - API test that knowledge stats count each library.
 - API test that bulk raw-copy deletion matches and deletes more than 100
   filtered candidates.
+- API test that unfiltered bulk raw-copy deletion is rejected and preserves all
+  rows.
 - Full backend regression: `python -m pytest`.
 - Static check: `python -m ruff check app tests alembic`.
 
