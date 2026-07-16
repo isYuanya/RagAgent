@@ -1,6 +1,6 @@
 import * as React from "react";
 import { toast } from "sonner";
-import { FileSearch, Loader2, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { CheckSquare, FileSearch, Loader2, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -23,10 +23,12 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  bulkDeleteFragments,
   createFragment,
   deleteFragment,
   extractApprovedFragments,
   fetchFragmentsPage,
+  previewBulkDeleteFragments,
   updateFragment
 } from "@/lib/api";
 import { cn, formatPositionLabel, formatRoleLabel } from "@/lib/utils";
@@ -101,9 +103,14 @@ export function FragmentsPanel({
   const [editing, setEditing] = React.useState<KnowledgeFragment | null>(null);
   const [deleting, setDeleting] = React.useState<KnowledgeFragment | null>(null);
   const [deleteBusy, setDeleteBusy] = React.useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = React.useState(false);
+  const [bulkDeleteBusy, setBulkDeleteBusy] = React.useState(false);
+  const [selectedFilteredCount, setSelectedFilteredCount] = React.useState(0);
   const [extractingApproved, setExtractingApproved] = React.useState(false);
 
   const selected = items.find((item) => item.id === selectedId) ?? null;
+  const activeFilters = React.useMemo(() => compactFilters(filters), [filters]);
+  const hasActiveFilter = Object.keys(activeFilters).length > 0;
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -144,6 +151,7 @@ export function FragmentsPanel({
     setDraftFilters(next);
     setFilters(next);
     setSelectedId(null);
+    setSelectedFilteredCount(0);
   }, [sourceCopyId]);
 
   function openCreate() {
@@ -159,12 +167,82 @@ export function FragmentsPanel({
   function applyFilters() {
     setFilters(draftFilters);
     setSelectedId(null);
+    setSelectedFilteredCount(0);
   }
 
   function clearFilters() {
     setDraftFilters(EMPTY_FILTERS);
     setFilters(EMPTY_FILTERS);
     setSelectedId(null);
+    setSelectedFilteredCount(0);
+  }
+
+  async function selectFilteredResults() {
+    if (!hasActiveFilter) {
+      toast.error("请先设置至少一个筛选条件");
+      return;
+    }
+    setBulkDeleteBusy(true);
+    try {
+      const result = await previewBulkDeleteFragments({
+        ...activeFilters,
+        confirm: false
+      });
+      setSelectedFilteredCount(result.matched_count);
+      if (result.matched_count === 0) {
+        toast.info("当前筛选没有命中片段");
+      } else {
+        toast.success(`已选中 ${result.matched_count} 条筛选结果`);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "计算筛选结果失败");
+    } finally {
+      setBulkDeleteBusy(false);
+    }
+  }
+
+  async function openBulkDelete() {
+    if (!hasActiveFilter) {
+      toast.error("请先设置至少一个筛选条件");
+      return;
+    }
+    setBulkDeleteBusy(true);
+    try {
+      const result = await previewBulkDeleteFragments({
+        ...activeFilters,
+        confirm: false
+      });
+      setSelectedFilteredCount(result.matched_count);
+      if (result.matched_count === 0) {
+        toast.info("当前筛选没有命中片段");
+        return;
+      }
+      setBulkDeleteOpen(true);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "计算删除数量失败");
+    } finally {
+      setBulkDeleteBusy(false);
+    }
+  }
+
+  async function handleBulkDelete() {
+    setBulkDeleteBusy(true);
+    try {
+      const result = await bulkDeleteFragments({
+        ...activeFilters,
+        confirm: true
+      });
+      toast.success(`已删除 ${result.deleted_count} 条片段`);
+      setBulkDeleteOpen(false);
+      setSelectedFilteredCount(0);
+      setSelectedId(null);
+      await load();
+      onChanged();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "批量删除片段失败");
+    } finally {
+      setBulkDeleteBusy(false);
+    }
   }
 
   async function handleDelete() {
@@ -333,6 +411,33 @@ export function FragmentsPanel({
               筛选
             </Button>
           </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-2">
+            <div className="text-xs text-muted-foreground">
+              {selectedFilteredCount > 0
+                ? `已选择筛选结果 ${selectedFilteredCount} 条`
+                : "筛选后可选择全部命中片段"}
+            </div>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void selectFilteredResults()}
+                disabled={!hasActiveFilter || bulkDeleteBusy}
+              >
+                <CheckSquare />
+                全选筛选结果
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => void openBulkDelete()}
+                disabled={!hasActiveFilter || bulkDeleteBusy}
+              >
+                {bulkDeleteBusy ? <Loader2 className="animate-spin" /> : <Trash2 />}
+                删除筛选结果
+              </Button>
+            </div>
+          </div>
         </div>
 
         <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
@@ -422,6 +527,14 @@ export function FragmentsPanel({
         description="删除后该片段不再显示。"
         busy={deleteBusy}
         onConfirm={handleDelete}
+      />
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        title="删除筛选结果"
+        description={`将删除当前筛选命中的 ${selectedFilteredCount} 条片段，并同步清理 Milvus 向量。该操作不会删除原始文案。`}
+        busy={bulkDeleteBusy}
+        onConfirm={handleBulkDelete}
       />
     </div>
   );

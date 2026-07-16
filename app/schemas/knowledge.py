@@ -216,5 +216,20 @@ class RawCopyBulkDeleteRequest(BaseModel):
     raw_copy_ids: list[str] | None = None
 
 
+class FragmentBulkDeleteRequest(BaseModel):
+    confirm: bool = False
+    source_copy_id: str | None = None
+    fragment_role: str | None = None
+    position: str | None = None
+    industry: str | None = None
+    status: Literal["pending_review", "approved", "rejected"] | None = None
+    platform: str | None = None
+    purpose: str | None = None
+    audience: str | None = None
+    risk_level: Literal["low", "medium", "high"] | None = None
+    q: str | None = None
+    fragment_ids: list[str] | None = None
+
+
 class KnowledgeBulkOperationResponse(BulkOperationResponse):
     pass

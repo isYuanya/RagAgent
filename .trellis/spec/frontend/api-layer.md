@@ -173,11 +173,17 @@ fetchTemplatesPage(page, pageSize): Promise<ListResponse<KnowledgeTemplate>>
 fetchFragmentsPage(filters, page, pageSize): Promise<ListResponse<KnowledgeFragment>>
 previewBulkDeleteRawCopies(body): Promise<BulkOperationResponse>
 bulkDeleteRawCopies(body): Promise<BulkOperationResponse>
+previewBulkDeleteFragments(body): Promise<BulkOperationResponse>
+bulkDeleteFragments(body): Promise<BulkOperationResponse>
 ```
 
 Bulk delete UI must preview `matched_count` first, show a destructive
 confirmation, then call the confirmed endpoint and refresh both the current list
 and `fetchKnowledgeStats()`.
+
+Fragment bulk delete UI must require at least one active filter before enabling
+"select all filtered results" or "delete filtered results"; never let an empty
+filter payload represent "delete the whole fragment library".
 
 ### Draft next-sentence recommendation
 

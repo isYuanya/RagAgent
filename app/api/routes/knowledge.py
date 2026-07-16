@@ -6,6 +6,7 @@ from app.schemas.knowledge import (
     AnalysisSummary,
     AnalysisUpdate,
     FragmentCreate,
+    FragmentBulkDeleteRequest,
     FragmentExtractionBatchResponse,
     FragmentExtractionResult,
     FragmentItem,
@@ -221,6 +222,16 @@ def list_fragments(
 @router.post("/fragments", response_model=FragmentItem)
 def create_fragment(payload: FragmentCreate):
     return knowledge.create_fragment(payload)
+
+
+@router.post("/fragments/bulk-delete", response_model=KnowledgeBulkOperationResponse)
+def bulk_delete_fragments(payload: FragmentBulkDeleteRequest):
+    return knowledge.bulk_delete_fragments(payload)
+
+
+@router.post("/fragments/bulk-delete/preview", response_model=KnowledgeBulkOperationResponse)
+def preview_bulk_delete_fragments(payload: FragmentBulkDeleteRequest):
+    return knowledge.preview_bulk_delete_fragments(payload)
 
 
 @router.post("/fragments/extract-approved", response_model=FragmentExtractionBatchResponse)

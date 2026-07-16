@@ -340,6 +340,93 @@ def test_bulk_delete_raw_copies_rejects_unfiltered_delete_all() -> None:
     assert client.get("/api/knowledge/raw-copies").json()["total"] == 3
 
 
+def test_bulk_delete_fragments_matches_filtered_results_beyond_first_100(monkeypatch) -> None:
+    deleted_vectors = []
+    monkeypatch.setattr(
+        "app.services.knowledge.delete_fragment_vectors",
+        lambda ids: deleted_vectors.extend(ids) or True,
+    )
+    monkeypatch.setattr("app.services.knowledge.upsert_fragment_vector", lambda document: True)
+    raw_response = client.post("/api/knowledge/raw-copies", json={"source_text": "fragment raw"})
+    raw_id = raw_response.json()["id"]
+    keep_response = client.post(
+        "/api/knowledge/fragments",
+        json={
+            "source_copy_id": raw_id,
+            "sequence_order": 0,
+            "fragment_text": "keep fragment",
+            "fragment_role": "hook",
+            "position": "opening",
+            "industry": "keep",
+            "status": "approved",
+        },
+    )
+    keep_id = keep_response.json()["id"]
+    for index in range(105):
+        response = client.post(
+            "/api/knowledge/fragments",
+            json={
+                "source_copy_id": raw_id,
+                "sequence_order": index,
+                "fragment_text": f"delete fragment {index}",
+                "fragment_role": "hook",
+                "position": "opening",
+                "industry": "bulk-fragment",
+                "status": "approved",
+            },
+        )
+        assert response.status_code == 200
+
+    preview = client.post(
+        "/api/knowledge/fragments/bulk-delete/preview",
+        json={"industry": "bulk-fragment"},
+    )
+    assert preview.status_code == 200
+    assert preview.json()["matched_count"] == 105
+
+    response = client.post(
+        "/api/knowledge/fragments/bulk-delete",
+        json={"confirm": True, "industry": "bulk-fragment"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["matched_count"] == 105
+    assert payload["deleted_count"] == 105
+    assert client.get("/api/knowledge/fragments?industry=bulk-fragment").json()["total"] == 0
+    assert client.get(f"/api/knowledge/fragments/{keep_id}").status_code == 200
+    assert len(deleted_vectors) == 105
+
+
+def test_bulk_delete_fragments_rejects_unfiltered_delete_all() -> None:
+    raw_response = client.post("/api/knowledge/raw-copies", json={"source_text": "safe fragment raw"})
+    raw_id = raw_response.json()["id"]
+    for index in range(3):
+        response = client.post(
+            "/api/knowledge/fragments",
+            json={
+                "source_copy_id": raw_id,
+                "sequence_order": index,
+                "fragment_text": f"safe fragment {index}",
+                "fragment_role": "hook",
+                "position": "opening",
+            },
+        )
+        assert response.status_code == 200
+
+    preview = client.post("/api/knowledge/fragments/bulk-delete/preview", json={})
+    assert preview.status_code == 200
+    assert preview.json()["failed_count"] == 1
+    assert preview.json()["matched_count"] == 0
+
+    response = client.post("/api/knowledge/fragments/bulk-delete", json={"confirm": True})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["failed_count"] == 1
+    assert payload["deleted_count"] == 0
+    assert client.get("/api/knowledge/fragments").json()["total"] == 3
+
+
 def test_copy_import_populates_raw_copy_and_analysis_libraries(monkeypatch) -> None:
     monkeypatch.setattr("app.services.copy_analysis.get_llm_client", lambda: FakeLLMClient())
     monkeypatch.setattr("app.api.routes.copy.enqueue_copy_import", lambda csv_text, collection_ids=None: __import__(

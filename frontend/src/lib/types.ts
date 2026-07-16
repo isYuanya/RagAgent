@@ -221,6 +221,11 @@ export type RawCopyBulkDeleteRequest = {
   raw_copy_ids?: string[] | null;
 };
 
+export type FragmentBulkDeleteRequest = FragmentFilters & {
+  confirm: boolean;
+  fragment_ids?: string[] | null;
+};
+
 export type DraftStatus = "draft" | "ready" | "archived";
 
 export type DraftItem = {

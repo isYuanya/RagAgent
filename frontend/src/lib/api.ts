@@ -47,6 +47,7 @@
   NextSentenceRecommendationRequest,
   ListResponse,
   BulkOperationResponse,
+  FragmentBulkDeleteRequest,
   RawCopyBulkDeleteRequest,
   RawCopySummary,
   SystemStatusResponse,
@@ -442,6 +443,28 @@ export function updateFragment(
 
 export function deleteFragment(id: string): Promise<void> {
   return deleteResource(`${knowledgeBase}/fragments/${id}`, "鍒犻櫎鐗囨澶辫触");
+}
+
+export function previewBulkDeleteFragments(
+  body: FragmentBulkDeleteRequest
+): Promise<BulkOperationResponse> {
+  return writeJson(
+    `${knowledgeBase}/fragments/bulk-delete/preview`,
+    "POST",
+    body,
+    "计算删除片段数量失败"
+  );
+}
+
+export function bulkDeleteFragments(
+  body: FragmentBulkDeleteRequest
+): Promise<BulkOperationResponse> {
+  return writeJson(
+    `${knowledgeBase}/fragments/bulk-delete`,
+    "POST",
+    body,
+    "批量删除片段失败"
+  );
 }
 
 // ---- Draft workbench ----

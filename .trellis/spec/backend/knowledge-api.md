@@ -26,6 +26,8 @@ GET|POST   /api/knowledge/analyses
 GET|PATCH|DELETE /api/knowledge/analyses/{id}
 
 GET|POST   /api/knowledge/fragments
+POST       /api/knowledge/fragments/bulk-delete/preview
+POST       /api/knowledge/fragments/bulk-delete
 POST       /api/knowledge/fragments/extract-approved
 POST       /api/knowledge/fragments/extract/{source_copy_id}
 GET|PATCH|DELETE /api/knowledge/fragments/{id}
@@ -65,6 +67,18 @@ knowledge_templates
 - Bulk raw-copy deletion must reject an unfiltered request where
   `collection_id`, `status`, `industry`, `platform`, and `raw_copy_ids` are all
   absent. This prevents accidental "delete the whole raw-copy library" actions.
+- Bulk fragment deletion uses the same `BulkOperationResponse` shape and must
+  preview `matched_count` before destructive confirmation. Confirmed deletion
+  matches all filtered fragment candidates, not only the current page or first
+  100 rows.
+- Bulk fragment deletion must reject an unfiltered request where
+  `source_copy_id`, `fragment_role`, `position`, `industry`, `status`,
+  `platform`, `purpose`, `audience`, `risk_level`, `q`, and `fragment_ids` are
+  all absent. This prevents accidental "delete the whole fragment library"
+  actions.
+- Bulk fragment deletion soft-deletes `knowledge_fragments` rows and calls
+  Milvus fragment-vector deletion for deleted fragment ids. It must not delete
+  the source raw copy.
 - Templates accept optional source traceability:
 
 ```json
@@ -108,6 +122,11 @@ knowledge_templates
 - API test that bulk raw-copy deletion matches and deletes more than 100
   filtered candidates.
 - API test that unfiltered bulk raw-copy deletion is rejected and preserves all
+  rows.
+- API test that bulk fragment deletion matches and deletes more than 100
+  filtered candidates, leaves non-matching fragments visible, and clears vector
+  ids.
+- API test that unfiltered bulk fragment deletion is rejected and preserves all
   rows.
 - Full backend regression: `python -m pytest`.
 - Static check: `python -m ruff check app tests alembic`.
@@ -174,6 +193,9 @@ Fragment provenance and ordering are first-class fields so filtering and future 
 - The `q` filter is keyword search against fragment text and context, not vector retrieval.
 - Fragment CRUD must follow the same DB-first, in-memory fallback pattern as templates and must be covered by API tests.
 - Backfill extraction must be idempotent by `source_copy_id`; if fragments already exist, return `skipped` with the existing fragment count.
+- Fragment bulk delete request fields mirror fragment list filters plus optional
+  `fragment_ids` and `confirm`. Preview uses `confirm=false`; destructive calls
+  require `confirm=true`.
 
 ## Copy Import Contract
 

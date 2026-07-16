@@ -28,6 +28,7 @@ from app.schemas.knowledge import (
     AnalysisListResponse,
     AnalysisSummary,
     AnalysisUpdate,
+    FragmentBulkDeleteRequest,
     FragmentCreate,
     FragmentItem,
     FragmentUpdate,
@@ -250,6 +251,100 @@ def preview_bulk_delete_raw_copies(payload: RawCopyBulkDeleteRequest) -> Knowled
         failed_count=0,
         item_ids=[asset.id for asset in candidates],
         errors=[],
+    )
+
+
+def bulk_delete_fragments(payload: FragmentBulkDeleteRequest) -> KnowledgeBulkOperationResponse:
+    if not payload.confirm:
+        return KnowledgeBulkOperationResponse(
+            matched_count=0,
+            deleted_count=0,
+            skipped_count=0,
+            failed_count=1,
+            errors=[{"id": "*", "error": "Bulk delete requires confirm=true."}],
+        )
+    if _is_unfiltered_fragment_bulk_delete(payload):
+        return _unsafe_bulk_delete_response()
+    candidates = _matching_fragment_candidates(payload)
+
+    deleted: list[str] = []
+    errors: list[dict[str, str]] = []
+    for item in candidates:
+        if delete_fragment(item.id):
+            deleted.append(item.id)
+        else:
+            errors.append({"id": item.id, "error": "delete_failed"})
+            logger.warning("Fragment bulk delete failed for %s", item.id)
+    return KnowledgeBulkOperationResponse(
+        matched_count=len(candidates),
+        deleted_count=len(deleted),
+        skipped_count=len(candidates) - len(deleted) - len(errors),
+        failed_count=len(errors),
+        item_ids=deleted,
+        errors=errors,
+    )
+
+
+def preview_bulk_delete_fragments(
+    payload: FragmentBulkDeleteRequest,
+) -> KnowledgeBulkOperationResponse:
+    if _is_unfiltered_fragment_bulk_delete(payload):
+        return _unsafe_bulk_delete_response()
+    candidates = _matching_fragment_candidates(payload)
+    return KnowledgeBulkOperationResponse(
+        matched_count=len(candidates),
+        deleted_count=0,
+        skipped_count=0,
+        failed_count=0,
+        item_ids=[item.id for item in candidates],
+        errors=[],
+    )
+
+
+def _matching_fragment_candidates(payload: FragmentBulkDeleteRequest) -> list[FragmentItem]:
+    filters = _fragment_filters_from_bulk_payload(payload)
+    db_items = _db_matching_fragments(filters, payload.q, payload.fragment_ids)
+    if db_items is not None:
+        return db_items
+    allowed = set(payload.fragment_ids) if payload.fragment_ids is not None else None
+    return [
+        item
+        for item_id, item in _store.fragments.items()
+        if item_id not in _store.deleted_fragments
+        and (allowed is None or item.id in allowed)
+        and _fragment_matches(item, filters, payload.q)
+    ]
+
+
+def _fragment_filters_from_bulk_payload(
+    payload: FragmentBulkDeleteRequest,
+) -> dict[str, str | None]:
+    return {
+        "source_copy_id": payload.source_copy_id,
+        "fragment_role": payload.fragment_role,
+        "position": payload.position,
+        "industry": payload.industry,
+        "status": payload.status,
+        "platform": payload.platform,
+        "purpose": payload.purpose,
+        "audience": payload.audience,
+        "risk_level": payload.risk_level,
+    }
+
+
+def _is_unfiltered_fragment_bulk_delete(payload: FragmentBulkDeleteRequest) -> bool:
+    return (
+        payload.source_copy_id is None
+        and payload.fragment_role is None
+        and payload.position is None
+        and payload.industry is None
+        and payload.status is None
+        and payload.platform is None
+        and payload.purpose is None
+        and payload.audience is None
+        and payload.risk_level is None
+        and not payload.q
+        and payload.fragment_ids is None
     )
 
 
@@ -961,19 +1056,7 @@ def _db_list_fragments(
         return None
     db = SessionLocal()
     try:
-        statement = select(KnowledgeFragment).where(KnowledgeFragment.is_deleted.is_(False))
-        for key, value in filters.items():
-            if value is not None:
-                statement = statement.where(getattr(KnowledgeFragment, key) == value)
-        if q:
-            like = f"%{q}%"
-            statement = statement.where(
-                or_(
-                    KnowledgeFragment.fragment_text.ilike(like),
-                    KnowledgeFragment.before_context.ilike(like),
-                    KnowledgeFragment.after_context.ilike(like),
-                )
-            )
+        statement = _fragment_select_statement(filters, q)
         rows = db.scalars(
             statement.order_by(KnowledgeFragment.source_copy_id, KnowledgeFragment.sequence_order)
         ).all()
@@ -990,6 +1073,47 @@ def _db_list_fragments(
         return None
     finally:
         db.close()
+
+
+def _db_matching_fragments(
+    filters: dict[str, str | None],
+    q: str | None,
+    fragment_ids: list[str] | None,
+) -> list[FragmentItem] | None:
+    if _db_available is False:
+        return None
+    db = SessionLocal()
+    try:
+        statement = _fragment_select_statement(filters, q)
+        if fragment_ids is not None:
+            statement = statement.where(KnowledgeFragment.id.in_(fragment_ids))
+        rows = db.scalars(
+            statement.order_by(KnowledgeFragment.source_copy_id, KnowledgeFragment.sequence_order)
+        ).all()
+        _mark_db_available(True)
+        return [_fragment_from_model(row) for row in rows]
+    except SQLAlchemyError:
+        _mark_db_available(False)
+        return None
+    finally:
+        db.close()
+
+
+def _fragment_select_statement(filters: dict[str, str | None], q: str | None):
+    statement = select(KnowledgeFragment).where(KnowledgeFragment.is_deleted.is_(False))
+    for key, value in filters.items():
+        if value is not None:
+            statement = statement.where(getattr(KnowledgeFragment, key) == value)
+    if q:
+        like = f"%{q}%"
+        statement = statement.where(
+            or_(
+                KnowledgeFragment.fragment_text.ilike(like),
+                KnowledgeFragment.before_context.ilike(like),
+                KnowledgeFragment.after_context.ilike(like),
+            )
+        )
+    return statement
 
 
 def _db_create_fragment(payload: FragmentCreate) -> FragmentItem | None:
