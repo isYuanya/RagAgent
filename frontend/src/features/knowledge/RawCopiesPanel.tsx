@@ -1,6 +1,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import { Inbox } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -12,9 +13,11 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import {
+  bulkDeleteRawCopies,
   deleteRawCopy,
   extractFragmentsForRawCopy,
-  fetchRawCopies
+  fetchRawCopiesPage,
+  previewBulkDeleteRawCopies
 } from "@/lib/api";
 import type { KnowledgeCollection, RawCopySummary } from "@/lib/types";
 import { StatusBadge } from "@/features/StatusBadge";
@@ -27,18 +30,27 @@ const ALL = "__all__";
 
 export function RawCopiesPanel({
   collections,
+  onChanged,
   onViewFragments
 }: {
   collections: KnowledgeCollection[];
+  onChanged: () => void;
   onViewFragments: (rawCopyId: string) => void;
 }) {
   const [items, setItems] = React.useState<RawCopySummary[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [loadingMore, setLoadingMore] = React.useState(false);
+  const [page, setPage] = React.useState(1);
+  const [total, setTotal] = React.useState(0);
   const [collectionId, setCollectionId] = React.useState(ALL);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  const [checkedIds, setCheckedIds] = React.useState<string[]>([]);
   const [editOpen, setEditOpen] = React.useState(false);
   const [deleting, setDeleting] = React.useState<RawCopySummary | null>(null);
   const [deleteBusy, setDeleteBusy] = React.useState(false);
+  const [bulkDeleteMode, setBulkDeleteMode] = React.useState<"selected" | "filtered" | null>(null);
+  const [bulkDeleteCount, setBulkDeleteCount] = React.useState(0);
+  const [bulkDeleteBusy, setBulkDeleteBusy] = React.useState(false);
   const [extractingId, setExtractingId] = React.useState<string | null>(null);
 
   const selected = items.find((x) => x.id === selectedId) ?? null;
@@ -46,11 +58,13 @@ export function RawCopiesPanel({
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
-      const data = await fetchRawCopies(
+      const data = await fetchRawCopiesPage(
         collectionId === ALL ? undefined : collectionId
       );
-      setItems(data);
-      setSelectedId((current) => current ?? data[0]?.id ?? null);
+      setItems(data.items);
+      setTotal(data.total);
+      setPage(data.page);
+      setSelectedId((current) => current ?? data.items[0]?.id ?? null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "加载失败");
     } finally {
@@ -61,6 +75,70 @@ export function RawCopiesPanel({
   React.useEffect(() => {
     void load();
   }, [load]);
+
+  async function loadMore() {
+    setLoadingMore(true);
+    try {
+      const data = await fetchRawCopiesPage(
+        collectionId === ALL ? undefined : collectionId,
+        page + 1
+      );
+      setItems((current) => [...current, ...data.items]);
+      setTotal(data.total);
+      setPage(data.page);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "加载更多失败");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  function buildBulkPayload(confirm: boolean) {
+    return {
+      confirm,
+      collection_id: collectionId === ALL ? null : collectionId,
+      raw_copy_ids: bulkDeleteMode === "selected" ? checkedIds : null
+    };
+  }
+
+  async function openBulkDelete(mode: "selected" | "filtered") {
+    if (mode === "selected" && checkedIds.length === 0) {
+      toast.error("请先选择要删除的文案");
+      return;
+    }
+    setBulkDeleteBusy(true);
+    setBulkDeleteMode(mode);
+    try {
+      const result = await previewBulkDeleteRawCopies({
+        confirm: false,
+        collection_id: collectionId === ALL ? null : collectionId,
+        raw_copy_ids: mode === "selected" ? checkedIds : null
+      });
+      setBulkDeleteCount(result.matched_count);
+    } catch (error) {
+      setBulkDeleteMode(null);
+      toast.error(error instanceof Error ? error.message : "计算删除数量失败");
+    } finally {
+      setBulkDeleteBusy(false);
+    }
+  }
+
+  async function handleBulkDelete() {
+    if (!bulkDeleteMode) return;
+    setBulkDeleteBusy(true);
+    try {
+      const result = await bulkDeleteRawCopies(buildBulkPayload(true));
+      toast.success(`已删除 ${result.deleted_count} 条`);
+      setBulkDeleteMode(null);
+      setCheckedIds([]);
+      await load();
+      onChanged();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "批量删除失败");
+    } finally {
+      setBulkDeleteBusy(false);
+    }
+  }
 
   function applyUpdated(updated: RawCopySummary) {
     setItems((current) =>
@@ -86,6 +164,7 @@ export function RawCopiesPanel({
       toast.success("已删除");
       removeLocalItem(deletingId);
       setDeleting(null);
+      onChanged();
     } catch (error) {
       const message = error instanceof Error ? error.message : "删除失败";
       if (message === "Raw copy not found") {
@@ -138,6 +217,30 @@ export function RawCopiesPanel({
           </Select>
         </div>
 
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+          <span>
+            已加载 {items.length} / {total}，已选 {checkedIds.length}
+          </span>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void openBulkDelete("selected")}
+              disabled={checkedIds.length === 0 || bulkDeleteBusy}
+            >
+              删除所选
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void openBulkDelete("filtered")}
+              disabled={total === 0 || bulkDeleteBusy}
+            >
+              删除筛选结果
+            </Button>
+          </div>
+        </div>
+
         <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
           {loading ? (
             Array.from({ length: 5 }).map((_, i) => (
@@ -165,8 +268,23 @@ export function RawCopiesPanel({
                   )}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <span className="line-clamp-1 text-sm font-medium">
-                      {title}
+                    <span className="flex min-w-0 items-start gap-2">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5 size-4"
+                        checked={checkedIds.includes(item.id)}
+                        onClick={(event) => event.stopPropagation()}
+                        onChange={(event) => {
+                          setCheckedIds((current) =>
+                            event.target.checked
+                              ? [...current, item.id]
+                              : current.filter((id) => id !== item.id)
+                          );
+                        }}
+                      />
+                      <span className="line-clamp-1 text-sm font-medium">
+                        {title}
+                      </span>
                     </span>
                     <StatusBadge status={item.status} />
                   </div>
@@ -182,6 +300,17 @@ export function RawCopiesPanel({
             })
           )}
         </div>
+        {!loading && items.length < total ? (
+          <Button
+            className="mt-3 w-full"
+            size="sm"
+            variant="outline"
+            onClick={() => void loadMore()}
+            disabled={loadingMore}
+          >
+            {loadingMore ? "加载中..." : "加载更多"}
+          </Button>
+        ) : null}
       </Card>
 
       <Card className="flex min-h-0 flex-col overflow-hidden p-0">
@@ -216,6 +345,14 @@ export function RawCopiesPanel({
         description="删除后该条目不再显示。"
         busy={deleteBusy}
         onConfirm={handleDelete}
+      />
+      <ConfirmDialog
+        open={bulkDeleteMode !== null}
+        onOpenChange={(open) => !open && setBulkDeleteMode(null)}
+        title="批量删除原始文案"
+        description={`将删除 ${bulkDeleteCount} 条匹配文案，并同步清理关联数据和向量。`}
+        busy={bulkDeleteBusy}
+        onConfirm={handleBulkDelete}
       />
     </div>
   );

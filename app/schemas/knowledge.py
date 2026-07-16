@@ -199,6 +199,14 @@ class KnowledgeItemListResponse(BaseModel):
     total: int = Field(ge=0)
 
 
+class KnowledgeStatsResponse(BaseModel):
+    collections: int = Field(ge=0)
+    raw_copies: int = Field(ge=0)
+    analyses: int = Field(ge=0)
+    templates: int = Field(ge=0)
+    fragments: int = Field(ge=0)
+
+
 class RawCopyBulkDeleteRequest(BaseModel):
     confirm: bool = False
     collection_id: str | None = None

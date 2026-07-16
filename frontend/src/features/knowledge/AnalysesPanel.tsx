@@ -5,16 +5,19 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { fetchAnalyses, deleteAnalysis } from "@/lib/api";
+import { fetchAnalysesPage, deleteAnalysis } from "@/lib/api";
 import type { AnalysisSummary } from "@/lib/types";
 import { StatusBadge } from "@/features/StatusBadge";
 import { EmptyState } from "@/features/shared/EmptyState";
 import { ConfirmDialog } from "@/features/shared/ConfirmDialog";
 import { AnalysisView } from "./AnalysisView";
 
-export function AnalysesPanel() {
+export function AnalysesPanel({ onChanged }: { onChanged: () => void }) {
   const [items, setItems] = React.useState<AnalysisSummary[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [loadingMore, setLoadingMore] = React.useState(false);
+  const [page, setPage] = React.useState(1);
+  const [total, setTotal] = React.useState(0);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [deleting, setDeleting] = React.useState<AnalysisSummary | null>(null);
   const [deleteBusy, setDeleteBusy] = React.useState(false);
@@ -24,9 +27,11 @@ export function AnalysesPanel() {
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
-      const data = await fetchAnalyses();
-      setItems(data);
-      setSelectedId((current) => current ?? data[0]?.id ?? null);
+      const data = await fetchAnalysesPage();
+      setItems(data.items);
+      setTotal(data.total);
+      setPage(data.page);
+      setSelectedId((current) => current ?? data.items[0]?.id ?? null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "加载失败");
     } finally {
@@ -38,6 +43,20 @@ export function AnalysesPanel() {
     void load();
   }, [load]);
 
+  async function loadMore() {
+    setLoadingMore(true);
+    try {
+      const data = await fetchAnalysesPage(page + 1);
+      setItems((current) => [...current, ...data.items]);
+      setTotal(data.total);
+      setPage(data.page);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "加载更多失败");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
   async function handleDelete() {
     if (!deleting) return;
     setDeleteBusy(true);
@@ -47,6 +66,7 @@ export function AnalysesPanel() {
       setItems((current) => current.filter((x) => x.id !== deleting.id));
       if (selectedId === deleting.id) setSelectedId(null);
       setDeleting(null);
+      onChanged();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "删除失败");
     } finally {
@@ -98,6 +118,17 @@ export function AnalysesPanel() {
             })
           )}
         </div>
+        {!loading && items.length < total ? (
+          <Button
+            className="mt-3 w-full"
+            size="sm"
+            variant="outline"
+            onClick={() => void loadMore()}
+            disabled={loadingMore}
+          >
+            {loadingMore ? "加载中..." : "加载更多"}
+          </Button>
+        ) : null}
       </Card>
 
       <Card className="flex min-h-0 flex-col overflow-hidden p-0">

@@ -26,7 +26,7 @@ import {
   createFragment,
   deleteFragment,
   extractApprovedFragments,
-  fetchFragments,
+  fetchFragmentsPage,
   updateFragment
 } from "@/lib/api";
 import { cn, formatPositionLabel, formatRoleLabel } from "@/lib/utils";
@@ -81,9 +81,18 @@ const EMPTY_FILTERS: FragmentFilterDraft = {
   risk_level: ""
 };
 
-export function FragmentsPanel({ sourceCopyId }: { sourceCopyId?: string }) {
+export function FragmentsPanel({
+  sourceCopyId,
+  onChanged
+}: {
+  sourceCopyId?: string;
+  onChanged: () => void;
+}) {
   const [items, setItems] = React.useState<KnowledgeFragment[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [loadingMore, setLoadingMore] = React.useState(false);
+  const [page, setPage] = React.useState(1);
+  const [total, setTotal] = React.useState(0);
   const [filters, setFilters] = React.useState<FragmentFilterDraft>(EMPTY_FILTERS);
   const [draftFilters, setDraftFilters] =
     React.useState<FragmentFilterDraft>(EMPTY_FILTERS);
@@ -99,9 +108,11 @@ export function FragmentsPanel({ sourceCopyId }: { sourceCopyId?: string }) {
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
-      const data = await fetchFragments(compactFilters(filters));
-      setItems(data);
-      setSelectedId((current) => current ?? data[0]?.id ?? null);
+      const data = await fetchFragmentsPage(compactFilters(filters));
+      setItems(data.items);
+      setTotal(data.total);
+      setPage(data.page);
+      setSelectedId((current) => current ?? data.items[0]?.id ?? null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "加载片段库失败");
     } finally {
@@ -112,6 +123,20 @@ export function FragmentsPanel({ sourceCopyId }: { sourceCopyId?: string }) {
   React.useEffect(() => {
     void load();
   }, [load]);
+
+  async function loadMore() {
+    setLoadingMore(true);
+    try {
+      const data = await fetchFragmentsPage(compactFilters(filters), page + 1);
+      setItems((current) => [...current, ...data.items]);
+      setTotal(data.total);
+      setPage(data.page);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "加载更多失败");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   React.useEffect(() => {
     if (!sourceCopyId) return;
@@ -151,6 +176,7 @@ export function FragmentsPanel({ sourceCopyId }: { sourceCopyId?: string }) {
       setItems((current) => current.filter((item) => item.id !== deleting.id));
       if (selectedId === deleting.id) setSelectedId(null);
       setDeleting(null);
+      onChanged();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "删除片段失败");
     } finally {
@@ -166,6 +192,7 @@ export function FragmentsPanel({ sourceCopyId }: { sourceCopyId?: string }) {
         `已处理 ${result.processed_count} 条，生成 ${result.created_count} 条，失败 ${result.failed_count} 条`
       );
       await load();
+      onChanged();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "批量生成片段失败");
     } finally {
@@ -352,6 +379,17 @@ export function FragmentsPanel({ sourceCopyId }: { sourceCopyId?: string }) {
             ))
           )}
         </div>
+        {!loading && items.length < total ? (
+          <Button
+            className="mt-3 w-full"
+            size="sm"
+            variant="outline"
+            onClick={() => void loadMore()}
+            disabled={loadingMore}
+          >
+            {loadingMore ? "加载中..." : "加载更多"}
+          </Button>
+        ) : null}
       </Card>
 
       <Card className="flex min-h-0 flex-col overflow-hidden p-0">
@@ -372,7 +410,10 @@ export function FragmentsPanel({ sourceCopyId }: { sourceCopyId?: string }) {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         fragment={editing}
-        onSaved={load}
+        onSaved={() => {
+          void load();
+          onChanged();
+        }}
       />
       <ConfirmDialog
         open={deleting !== null}

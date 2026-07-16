@@ -12,13 +12,16 @@ import { CollectionDialog } from "./CollectionDialog";
 
 export function CollectionsPanel({
   collections,
+  total,
   loading,
   onChanged
 }: {
   collections: KnowledgeCollection[];
+  total: number;
   loading: boolean;
   onChanged: () => void;
 }) {
+  void total;
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<KnowledgeCollection | null>(null);
   const [deleting, setDeleting] = React.useState<KnowledgeCollection | null>(

@@ -95,6 +95,14 @@ export type ListResponse<T> = {
   page_size: number;
 };
 
+export type KnowledgeStatsResponse = {
+  collections: number;
+  raw_copies: number;
+  analyses: number;
+  templates: number;
+  fragments: number;
+};
+
 export type KnowledgeCollection = {
   id: string;
   name: string;
@@ -192,6 +200,25 @@ export type FragmentExtractionBatchResponse = {
   processed_count: number;
   created_count: number;
   failed_count: number;
+};
+
+export type BulkOperationResponse = {
+  matched_count: number;
+  deleted_count: number;
+  archived_count?: number;
+  skipped_count: number;
+  failed_count: number;
+  item_ids: string[];
+  errors: Array<{ id?: string; error?: string }>;
+};
+
+export type RawCopyBulkDeleteRequest = {
+  confirm: boolean;
+  collection_id?: string | null;
+  status?: ReviewStatus | null;
+  industry?: string | null;
+  platform?: string | null;
+  raw_copy_ids?: string[] | null;
 };
 
 export type DraftStatus = "draft" | "ready" | "archived";

@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass, field
 from typing import Any, TypeVar
 from uuid import uuid4
@@ -36,6 +37,7 @@ from app.schemas.knowledge import (
     KnowledgeCollectionUpdate,
     KnowledgeBulkOperationResponse,
     KnowledgeItemListResponse,
+    KnowledgeStatsResponse,
     RawCopyBulkDeleteRequest,
     RawCopyCreate,
     RawCopyListResponse,
@@ -49,11 +51,12 @@ from app.services.copy_assets import (
     create_copy_asset,
     delete_copy_asset_record,
     get_copy_asset,
-    list_copy_assets,
+    list_all_copy_assets,
 )
 
 
 T = TypeVar("T")
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -140,18 +143,19 @@ def list_raw_copies(
     page_size: int = 20,
     collection_id: str | None = None,
 ) -> RawCopyListResponse:
-    assets = list_copy_assets(page=1, page_size=100, status=None).items
+    assets = list_all_copy_assets()
     items = [
         _to_raw_summary(asset.id)
         for asset in assets
         if asset.id not in _store.raw_deleted
         and (collection_id is None or _raw_has_collection(asset.id, collection_id))
     ]
+    active_items = [item for item in items if item is not None]
     return RawCopyListResponse(
-        items=_page([item for item in items if item is not None], page, page_size),
+        items=_page(active_items, page, page_size),
         page=page,
         page_size=page_size,
-        total=len(items),
+        total=len(active_items),
     )
 
 
@@ -212,17 +216,7 @@ def bulk_delete_raw_copies(payload: RawCopyBulkDeleteRequest) -> KnowledgeBulkOp
             failed_count=1,
             errors=[{"id": "*", "error": "Bulk delete requires confirm=true."}],
         )
-    candidates = list_copy_assets(
-        page=1,
-        page_size=100,
-        status=payload.status,
-        industry=payload.industry,
-        platform=payload.platform,
-        collection_id=payload.collection_id,
-    ).items
-    if payload.raw_copy_ids is not None:
-        allowed = set(payload.raw_copy_ids)
-        candidates = [item for item in candidates if item.id in allowed]
+    candidates = _matching_raw_copy_candidates(payload)
 
     deleted: list[str] = []
     errors: list[dict[str, str]] = []
@@ -232,6 +226,7 @@ def bulk_delete_raw_copies(payload: RawCopyBulkDeleteRequest) -> KnowledgeBulkOp
             deleted.append(asset.id)
         elif result != "not_found":
             errors.append({"id": asset.id, "error": result})
+            logger.warning("Raw copy bulk delete failed for %s: %s", asset.id, result)
     return KnowledgeBulkOperationResponse(
         matched_count=len(candidates),
         deleted_count=len(deleted),
@@ -242,10 +237,38 @@ def bulk_delete_raw_copies(payload: RawCopyBulkDeleteRequest) -> KnowledgeBulkOp
     )
 
 
+def preview_bulk_delete_raw_copies(payload: RawCopyBulkDeleteRequest) -> KnowledgeBulkOperationResponse:
+    candidates = _matching_raw_copy_candidates(payload)
+    return KnowledgeBulkOperationResponse(
+        matched_count=len(candidates),
+        deleted_count=0,
+        skipped_count=0,
+        failed_count=0,
+        item_ids=[asset.id for asset in candidates],
+        errors=[],
+    )
+
+
+def _matching_raw_copy_candidates(payload: RawCopyBulkDeleteRequest):
+    candidates = list_all_copy_assets(
+        status=payload.status,
+        industry=payload.industry,
+        platform=payload.platform,
+    )
+    if payload.collection_id is not None:
+        candidates = [
+            item for item in candidates if _raw_has_collection(item.id, payload.collection_id)
+        ]
+    if payload.raw_copy_ids is not None:
+        allowed = set(payload.raw_copy_ids)
+        candidates = [item for item in candidates if item.id in allowed]
+    return [item for item in candidates if item.id not in _store.raw_deleted]
+
+
 def list_analyses(page: int = 1, page_size: int = 20) -> AnalysisListResponse:
     db_manual = _db_list_knowledge_analyses()
     from_assets = []
-    for asset in list_copy_assets(page=1, page_size=100).items:
+    for asset in list_all_copy_assets():
         if asset.auto_analysis is None or _is_projected_analysis_deleted(asset.id):
             continue
         from_assets.append(
@@ -264,6 +287,16 @@ def list_analyses(page: int = 1, page_size: int = 20) -> AnalysisListResponse:
         page=page,
         page_size=page_size,
         total=len(items),
+    )
+
+
+def get_knowledge_stats() -> KnowledgeStatsResponse:
+    return KnowledgeStatsResponse(
+        collections=list_collections(page=1, page_size=1).total,
+        raw_copies=list_raw_copies(page=1, page_size=1).total,
+        analyses=list_analyses(page=1, page_size=1).total,
+        templates=list_templates(page=1, page_size=1).total,
+        fragments=list_fragments(page=1, page_size=1).total,
     )
 
 
@@ -477,18 +510,28 @@ def delete_fragment(item_id: str) -> bool:
 def delete_fragments_for_source_copy(source_copy_id: str) -> int:
     response = list_fragments(page=1, page_size=100, source_copy_id=source_copy_id)
     deleted = 0
-    for item in response.items:
-        if isinstance(item, FragmentItem) and delete_fragment(item.id):
-            deleted += 1
+    while response.items:
+        for item in response.items:
+            if isinstance(item, FragmentItem) and delete_fragment(item.id):
+                deleted += 1
+        response = list_fragments(page=1, page_size=100, source_copy_id=source_copy_id)
     return deleted
 
 
 def cleanup_source_references(raw_copy_id: str) -> None:
     delete_fragments_for_source_copy(raw_copy_id)
-    for item in list_templates(page=1, page_size=100).items:
-        if not isinstance(item, TemplateItem):
-            continue
-        if item.source and item.source.source_id == raw_copy_id:
+    while True:
+        source_templates = [
+            item
+            for item in list_templates(page=1, page_size=100).items
+            if isinstance(item, TemplateItem)
+            and item.source
+            and item.source.source_type == "raw_copy"
+            and item.source.source_id == raw_copy_id
+        ]
+        if not source_templates:
+            break
+        for item in source_templates:
             delete_template(item.id)
     _store.deleted_analyses.add(raw_copy_id)
     _mark_projected_analysis_deleted(raw_copy_id)

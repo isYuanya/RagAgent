@@ -16,6 +16,7 @@ from app.schemas.knowledge import (
     KnowledgeCollectionListResponse,
     KnowledgeCollectionUpdate,
     KnowledgeItemListResponse,
+    KnowledgeStatsResponse,
     RawCopyCreate,
     RawCopyBulkDeleteRequest,
     RawCopyListResponse,
@@ -40,6 +41,11 @@ def _page_query(default: int = 1) -> int:
 
 def _page_size_query(default: int = 20) -> int:
     return Query(default=default, ge=1, le=100)
+
+
+@router.get("/stats", response_model=KnowledgeStatsResponse)
+def get_knowledge_stats():
+    return knowledge.get_knowledge_stats()
 
 
 @router.get("/collections", response_model=KnowledgeCollectionListResponse)
@@ -116,6 +122,11 @@ def delete_raw_copy(raw_copy_id: str):
 @router.post("/raw-copies/bulk-delete", response_model=KnowledgeBulkOperationResponse)
 def bulk_delete_raw_copies(payload: RawCopyBulkDeleteRequest):
     return knowledge.bulk_delete_raw_copies(payload)
+
+
+@router.post("/raw-copies/bulk-delete/preview", response_model=KnowledgeBulkOperationResponse)
+def preview_bulk_delete_raw_copies(payload: RawCopyBulkDeleteRequest):
+    return knowledge.preview_bulk_delete_raw_copies(payload)
 
 
 @router.get("/analyses", response_model=AnalysisListResponse)

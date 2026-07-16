@@ -33,7 +33,9 @@ directly.
 
 - One exported `async` function per endpoint; bare value params (not an options bag),
   except where a small object reads better (e.g. `updateRawCopy(id, { collection_ids })`).
-- Return `Promise<ConcreteType>`; list fetchers return `.items` (callers rarely need the envelope).
+- Return `Promise<ConcreteType>`. Legacy list fetchers may return `.items`, but
+  views that display totals, pagination, or bulk operations must use explicit
+  `fetch*Page` wrappers that return the full `ListResponse<T>` envelope.
 - Chinese error messages (surfaced via `toast`).
 
 ---
@@ -156,6 +158,26 @@ Current task-backed contracts:
 |---|---|---|---|
 | Copy import | `POST /api/copy/import` | import progress panel | refresh assets |
 | Draft next sentence | `POST /api/recommendations/next-sentence` | draft recommendation panel | `POST /api/recommendations/accepted` |
+
+### Knowledge list totals and bulk actions
+
+Knowledge views that need true totals must call typed API wrappers instead of
+deriving counts from loaded rows:
+
+```ts
+fetchKnowledgeStats(): Promise<KnowledgeStatsResponse>
+fetchCollectionsPage(page, pageSize): Promise<ListResponse<KnowledgeCollection>>
+fetchRawCopiesPage(collectionId, page, pageSize): Promise<ListResponse<RawCopySummary>>
+fetchAnalysesPage(page, pageSize): Promise<ListResponse<AnalysisSummary>>
+fetchTemplatesPage(page, pageSize): Promise<ListResponse<KnowledgeTemplate>>
+fetchFragmentsPage(filters, page, pageSize): Promise<ListResponse<KnowledgeFragment>>
+previewBulkDeleteRawCopies(body): Promise<BulkOperationResponse>
+bulkDeleteRawCopies(body): Promise<BulkOperationResponse>
+```
+
+Bulk delete UI must preview `matched_count` first, show a destructive
+confirmation, then call the confirmed endpoint and refresh both the current list
+and `fetchKnowledgeStats()`.
 
 ### Draft next-sentence recommendation
 

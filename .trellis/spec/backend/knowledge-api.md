@@ -13,11 +13,14 @@
 API namespace:
 
 ```text
+GET        /api/knowledge/stats
 GET|POST   /api/knowledge/collections
 GET|PATCH|DELETE /api/knowledge/collections/{id}
 
 GET|POST   /api/knowledge/raw-copies
 GET|PATCH|DELETE /api/knowledge/raw-copies/{id}
+POST       /api/knowledge/raw-copies/bulk-delete/preview
+POST       /api/knowledge/raw-copies/bulk-delete
 
 GET|POST   /api/knowledge/analyses
 GET|PATCH|DELETE /api/knowledge/analyses/{id}
@@ -44,6 +47,9 @@ knowledge_templates
 ### 3. Contracts
 
 - All list endpoints accept `page` and `page_size`.
+- `GET /api/knowledge/stats` returns true active totals for `collections`,
+  `raw_copies`, `analyses`, `templates`, and `fragments`; frontend must not load
+  all rows to calculate these counts.
 - `raw-copies` also accepts optional `collection_id`.
 - `fragments` also accepts optional `source_copy_id`, `fragment_role`, `position`, and `industry`.
 - Delete endpoints return `204` and use soft-delete semantics where the backing table has `is_deleted`.
@@ -52,6 +58,10 @@ knowledge_templates
   setting `copy_sources.metadata_json.deleted = true`; Redis-only records are removed from Redis.
 - If a PostgreSQL-backed raw copy cannot be deleted because the database is unavailable, return
   `503`; do not return `204` from an in-memory/cache-only fallback.
+- Bulk raw-copy deletion supports a preview endpoint that returns the same
+  `BulkOperationResponse` shape with `matched_count` and no deletion side
+  effects. Confirmed deletion must match all filtered candidates, not only the
+  current page or first 100 rows.
 - Templates accept optional source traceability:
 
 ```json
@@ -71,6 +81,8 @@ knowledge_templates
 | Deleted resource fetched again | `404` |
 | Database unavailable while deleting a PostgreSQL-backed raw copy through `/api/knowledge/raw-copies/{id}` | `503` and the cached copy is not treated as durably deleted |
 | Database unavailable in local dev | Service falls back to in-memory store where implemented |
+| Bulk delete preview | `200`, `matched_count` reflects all filtered candidates, no rows deleted |
+| Bulk delete without `confirm=true` | `200` response with `failed_count = 1` and an explanatory error |
 
 ### 5. Good/Base/Bad Cases
 
@@ -88,6 +100,9 @@ knowledge_templates
 - API test for template CRUD with `source`.
 - API test for fragment CRUD and filters by `source_copy_id`, `fragment_role`, `position`, or `industry`.
 - API test that CSV import populates raw copy and analysis libraries.
+- API test that knowledge stats count each library.
+- API test that bulk raw-copy deletion matches and deletes more than 100
+  filtered candidates.
 - Full backend regression: `python -m pytest`.
 - Static check: `python -m ruff check app tests alembic`.
 

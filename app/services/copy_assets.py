@@ -130,6 +130,29 @@ def list_copy_assets(
     )
 
 
+def list_all_copy_assets(
+    *,
+    status: str | None = None,
+    industry: str | None = None,
+    platform: str | None = None,
+    collection_id: str | None = None,
+) -> list[CopyAssetSummary]:
+    db_assets = _get_db_asset_items()
+    redis_assets = _get_redis_asset_items()
+    merged = _merge_asset_sources(
+        db_assets if db_assets is not None else [],
+        redis_assets if redis_assets is not None else [],
+        _copy_assets.values(),
+    )
+    return _filter_assets(
+        merged,
+        status=status,
+        industry=industry,
+        platform=platform,
+        collection_id=collection_id,
+    )
+
+
 def get_copy_asset(asset_id: str) -> CopyAssetSummary | None:
     db_asset = _get_db_asset(asset_id)
     if db_asset is not None:
@@ -179,14 +202,12 @@ def bulk_delete_copy_assets(payload: CopyAssetBulkDeleteRequest) -> BulkOperatio
             failed_count=1,
             errors=[{"id": "*", "error": "Bulk delete requires confirm=true."}],
         )
-    candidates = list_copy_assets(
-        page=1,
-        page_size=100,
+    candidates = list_all_copy_assets(
         status=payload.status,
         industry=payload.industry,
         platform=payload.platform,
         collection_id=payload.collection_id,
-    ).items
+    )
     if payload.asset_ids is not None:
         allowed = set(payload.asset_ids)
         candidates = [item for item in candidates if item.id in allowed]

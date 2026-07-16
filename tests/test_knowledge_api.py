@@ -252,6 +252,67 @@ def test_bulk_delete_raw_copies_cleans_fragments_and_templates(monkeypatch) -> N
     assert fragment_id in deleted_vectors
 
 
+def test_knowledge_stats_counts_each_library() -> None:
+    collection_response = client.post("/api/knowledge/collections", json={"name": "stats"})
+    raw_response = client.post(
+        "/api/knowledge/raw-copies",
+        json={"source_text": "stats raw", "collection_ids": [collection_response.json()["id"]]},
+    )
+    raw_id = raw_response.json()["id"]
+    client.post(
+        "/api/knowledge/templates",
+        json={"title": "stats template", "content": "template"},
+    )
+    client.post(
+        "/api/knowledge/fragments",
+        json={
+            "source_copy_id": raw_id,
+            "sequence_order": 0,
+            "fragment_text": "stats fragment",
+            "fragment_role": "hook",
+            "position": "opening",
+        },
+    )
+
+    response = client.get("/api/knowledge/stats")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["collections"] == 1
+    assert payload["raw_copies"] == 1
+    assert payload["templates"] == 1
+    assert payload["fragments"] == 1
+
+
+def test_bulk_delete_raw_copies_matches_beyond_first_100() -> None:
+    created_ids = []
+    for index in range(105):
+        response = client.post(
+            "/api/knowledge/raw-copies",
+            json={"source_text": f"bulk raw {index}", "platform": "bulk-platform"},
+        )
+        assert response.status_code == 200
+        created_ids.append(response.json()["id"])
+
+    preview = client.post(
+        "/api/knowledge/raw-copies/bulk-delete/preview",
+        json={"platform": "bulk-platform"},
+    )
+    assert preview.status_code == 200
+    assert preview.json()["matched_count"] == 105
+
+    response = client.post(
+        "/api/knowledge/raw-copies/bulk-delete",
+        json={"confirm": True, "platform": "bulk-platform"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["matched_count"] == 105
+    assert payload["deleted_count"] == 105
+    assert client.get("/api/knowledge/raw-copies").json()["total"] == 0
+
+
 def test_copy_import_populates_raw_copy_and_analysis_libraries(monkeypatch) -> None:
     monkeypatch.setattr("app.services.copy_analysis.get_llm_client", lambda: FakeLLMClient())
     monkeypatch.setattr("app.api.routes.copy.enqueue_copy_import", lambda csv_text, collection_ids=None: __import__(

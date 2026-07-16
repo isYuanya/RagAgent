@@ -24,7 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   createTemplate,
   deleteTemplate,
-  fetchTemplates,
+  fetchTemplatesPage,
   updateTemplate
 } from "@/lib/api";
 import { cn, splitLines } from "@/lib/utils";
@@ -37,10 +37,19 @@ import { EmptyState } from "@/features/shared/EmptyState";
 
 const SOURCE_NONE = "__none__";
 
-export function ManualKnowledgePanel({ kind }: { kind: "templates" }) {
+export function ManualKnowledgePanel({
+  kind,
+  onChanged
+}: {
+  kind: "templates";
+  onChanged: () => void;
+}) {
   void kind;
   const [items, setItems] = React.useState<KnowledgeTemplate[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [loadingMore, setLoadingMore] = React.useState(false);
+  const [page, setPage] = React.useState(1);
+  const [total, setTotal] = React.useState(0);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<KnowledgeTemplate | null>(null);
@@ -52,9 +61,11 @@ export function ManualKnowledgePanel({ kind }: { kind: "templates" }) {
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
-      const data = await fetchTemplates();
-      setItems(data);
-      setSelectedId((current) => current ?? data[0]?.id ?? null);
+      const data = await fetchTemplatesPage();
+      setItems(data.items);
+      setTotal(data.total);
+      setPage(data.page);
+      setSelectedId((current) => current ?? data.items[0]?.id ?? null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "加载失败");
     } finally {
@@ -65,6 +76,20 @@ export function ManualKnowledgePanel({ kind }: { kind: "templates" }) {
   React.useEffect(() => {
     void load();
   }, [load]);
+
+  async function loadMore() {
+    setLoadingMore(true);
+    try {
+      const data = await fetchTemplatesPage(page + 1);
+      setItems((current) => [...current, ...data.items]);
+      setTotal(data.total);
+      setPage(data.page);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "加载更多失败");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   function openCreate() {
     setEditing(null);
@@ -85,6 +110,7 @@ export function ManualKnowledgePanel({ kind }: { kind: "templates" }) {
       setItems((current) => current.filter((item) => item.id !== deleting.id));
       if (selectedId === deleting.id) setSelectedId(null);
       setDeleting(null);
+      onChanged();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "删除失败");
     } finally {
@@ -136,6 +162,17 @@ export function ManualKnowledgePanel({ kind }: { kind: "templates" }) {
             ))
           )}
         </div>
+        {!loading && items.length < total ? (
+          <Button
+            className="mt-3 w-full"
+            size="sm"
+            variant="outline"
+            onClick={() => void loadMore()}
+            disabled={loadingMore}
+          >
+            {loadingMore ? "加载中..." : "加载更多"}
+          </Button>
+        ) : null}
       </Card>
 
       <Card className="flex min-h-0 flex-col overflow-hidden p-0">
@@ -180,7 +217,10 @@ export function ManualKnowledgePanel({ kind }: { kind: "templates" }) {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         item={editing}
-        onSaved={load}
+        onSaved={() => {
+          void load();
+          onChanged();
+        }}
       />
       <ConfirmDialog
         open={deleting !== null}
