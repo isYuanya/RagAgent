@@ -641,6 +641,11 @@ accepted_compositions
 - Each candidate must contain exactly five items in fixed order: `hook`, `pain_point`, `solution`, `proof`, and `cta`.
 - The MVP may use only approved fragments as reference material. Do not require templates, Milvus, vector retrieval, or reranking.
 - Fragment retrieval must keep structured filters from the brief: `platform`, `purpose`, and `audience`, plus keyword queries from `product` and `key_selling_points`.
+- When semantic retrieval is unavailable or returns no contexts, keyword
+  fallback must expand long Chinese brief text into shorter searchable terms
+  before querying fragments. For example, a brief like `买房月供减压指南` should
+  still be able to match approved fragments containing `买房`, `月供`, `利率`,
+  or `还款` instead of requiring the full phrase to appear verbatim.
 - If no approved fragments match, generation must continue from the brief with `fallback_reason = "no_matching_fragments"`.
 - Fallback items must use `quote_mode = "original"` and empty `reference_fragment_ids`.
 - Direct copying of source fragment text is allowed only when `quote_mode = "direct"` and provenance is retained.
@@ -671,6 +676,9 @@ accepted_compositions
 
 - API test that auto-composition task returns exactly three candidates and five items each.
 - API test that matching approved fragments are included as references.
+- API test that Chinese keyword fallback can match approved fragments when
+  semantic retrieval returns no contexts and the full brief phrase does not
+  appear verbatim in the fragment.
 - API test that no matching fragments produces fallback candidates, not task failure.
 - API test that accepting a candidate creates one draft with five items and provenance metadata.
 - API test for missing task/candidate behavior.

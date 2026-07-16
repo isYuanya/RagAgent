@@ -144,7 +144,7 @@ def _create_approved_fragment() -> str:
     return fragment_response.json()["id"]
 
 
-def _run_composition(monkeypatch, llm_client) -> dict:
+def _run_composition(monkeypatch, llm_client, brief: dict | None = None) -> dict:
     monkeypatch.setattr("app.services.compositions.get_llm_client", lambda: llm_client)
     monkeypatch.setattr(
         "app.api.routes.compositions.enqueue_auto_composition",
@@ -152,7 +152,7 @@ def _run_composition(monkeypatch, llm_client) -> dict:
             "app.services.composition_jobs", fromlist=["run_auto_composition_task"]
         ).run_auto_composition_task(payload.model_dump()),
     )
-    response = client.post("/api/compositions/auto-draft", json={"brief": _brief()})
+    response = client.post("/api/compositions/auto-draft", json={"brief": brief or _brief()})
     assert response.status_code == 200
     task_payload = client.get(f"/api/tasks/{response.json()['task_id']}").json()
     assert task_payload["status"] == "finished"
@@ -196,6 +196,57 @@ def test_auto_composition_prefers_semantic_fragment_retrieval(monkeypatch) -> No
     monkeypatch.setattr("app.services.compositions.CopyKnowledgeRetriever", lambda: FakeRetriever())
     task_payload = _run_composition(monkeypatch, FakeCompositionLLMClient())
 
+    assert task_payload["result"]["reference_fragments"][0]["id"] == _current_fragment_id
+
+
+def test_auto_composition_keyword_fallback_expands_chinese_brief(monkeypatch) -> None:
+    global _current_fragment_id
+    raw_response = client.post(
+        "/api/knowledge/raw-copies",
+        json={
+            "source_text": "现在买房首付、贷款年限和还款方式都要提前算清楚。",
+            "platform": "douyin",
+            "audience": "expert_buyers",
+            "purpose": "conversion",
+        },
+    )
+    assert raw_response.status_code == 200
+    fragment_response = client.post(
+        "/api/knowledge/fragments",
+        json={
+            "source_copy_id": raw_response.json()["id"],
+            "sequence_order": 0,
+            "fragment_text": "现在买房首付是多付一点好还是少付一点好，贷款年限和还款方式都要提前算清楚。",
+            "fragment_role": "hook",
+            "position": "opening",
+            "platform": "douyin",
+            "audience": "expert_buyers",
+            "purpose": "conversion",
+            "source_quality": "high",
+            "risk_level": "low",
+            "status": "approved",
+            "confidence": 0.93,
+        },
+    )
+    assert fragment_response.status_code == 200
+    _current_fragment_id = fragment_response.json()["id"]
+
+    class EmptyRetriever:
+        def retrieve(self, query, limit=5, filters=None):
+            return []
+
+    monkeypatch.setattr("app.services.compositions.CopyKnowledgeRetriever", lambda: EmptyRetriever())
+    brief = {
+        "product": "买房月供减压指南",
+        "audience": "expert_buyers",
+        "platform": "douyin",
+        "purpose": "conversion",
+        "style": "practical",
+        "key_selling_points": ["识别隐藏成本", "选择利率方式", "安排还款方式"],
+    }
+    task_payload = _run_composition(monkeypatch, FakeCompositionLLMClient(), brief)
+
+    assert task_payload["result"]["fallback_reason"] is None
     assert task_payload["result"]["reference_fragments"][0]["id"] == _current_fragment_id
 
 

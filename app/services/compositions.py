@@ -1,4 +1,5 @@
 import json
+import re
 from dataclasses import dataclass, field
 from uuid import uuid4
 
@@ -28,6 +29,23 @@ from app.workers.tasks import get_task
 
 
 COMPOSITION_ROLES = ("hook", "pain_point", "solution", "proof", "cta")
+REFERENCE_KEYWORDS = (
+    "买房",
+    "月供",
+    "房贷",
+    "贷款",
+    "首付",
+    "利率",
+    "LPR",
+    "还款",
+    "等额本金",
+    "等额本息",
+    "利息",
+    "合同",
+    "隐藏成本",
+    "成本",
+    "银行",
+)
 POSITION_BY_ROLE = {
     "hook": "opening",
     "pain_point": "body",
@@ -237,7 +255,20 @@ def _reference_queries(brief: AutoCompositionBrief) -> list[str]:
         text = value.strip()
         if text and text not in queries:
             queries.append(text)
+        for keyword in _keyword_queries(text):
+            if keyword not in queries:
+                queries.append(keyword)
     return queries
+
+
+def _keyword_queries(text: str) -> list[str]:
+    keywords = [keyword for keyword in REFERENCE_KEYWORDS if keyword in text]
+    for chunk in re.findall(r"[\u4e00-\u9fff]{2,}", text):
+        if len(chunk) <= 4:
+            keywords.append(chunk)
+            continue
+        keywords.extend(chunk[index : index + 2] for index in range(0, len(chunk) - 1))
+    return [keyword for keyword in keywords if len(keyword.strip()) >= 2]
 
 
 def _fragment_summary(fragment) -> ReferenceFragmentSummary:
