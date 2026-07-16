@@ -199,6 +199,19 @@ def test_auto_composition_prefers_semantic_fragment_retrieval(monkeypatch) -> No
     assert task_payload["result"]["reference_fragments"][0]["id"] == _current_fragment_id
 
 
+def test_auto_composition_backs_filled_reference_ids_when_llm_omits_them(monkeypatch) -> None:
+    global _current_fragment_id
+    _current_fragment_id = _create_approved_fragment()
+
+    task_payload = _run_composition(monkeypatch, EmptyReferenceLLMClient())
+    first_item = task_payload["result"]["candidates"][0]["items"][0]
+
+    assert task_payload["result"]["fallback_reason"] is None
+    assert task_payload["result"]["reference_fragments"][0]["id"] == _current_fragment_id
+    assert first_item["quote_mode"] == "adapted"
+    assert first_item["reference_fragment_ids"] == [_current_fragment_id]
+
+
 def test_auto_composition_keyword_fallback_expands_chinese_brief(monkeypatch) -> None:
     global _current_fragment_id
     raw_response = client.post(

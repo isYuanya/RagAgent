@@ -239,6 +239,98 @@ Fragment provenance and ordering are first-class fields so filtering and future 
 - Derived templates must keep `source.source_type = raw_copy`, `source.source_id = copy asset id`, and a frontend-friendly `source.source_display` excerpt.
 - Import post-processing must also trigger fragment extraction when the imported asset status is already `approved`, using the same idempotent path as manual extraction.
 
+## Auto Composition Reference Attribution
+
+### 1. Scope / Trigger
+
+- Trigger: backend work that changes `/api/compositions/auto-draft`,
+  `app.services.compositions`, semantic retrieval, or composition candidate
+  provenance.
+
+### 2. Signatures
+
+```text
+POST /api/compositions/auto-draft
+GET  /api/tasks/{task_id}
+POST /api/compositions/accepted
+```
+
+Relevant response fields:
+
+```json
+{
+  "reference_fragments": [{"id": "...", "text": "...", "role": "hook"}],
+  "candidates": [
+    {
+      "items": [
+        {
+          "quote_mode": "direct | adapted | original",
+          "reference_fragment_ids": ["..."],
+          "source_copy_id": "..."
+        }
+      ]
+    }
+  ]
+}
+```
+
+### 3. Contracts
+
+- Composition prompts must include the retrieved `reference_fragments` and tell
+  the LLM to emit valid `reference_fragment_ids` for direct/adapted items.
+- If `reference_fragments` is not empty but the LLM omits
+  `reference_fragment_ids`, backend normalization must attach the best matching
+  reference by role, then by position, then by first available reference, and
+  mark the item `quote_mode = adapted`.
+- If no references exist, generated items must remain `quote_mode = original`
+  with empty `reference_fragment_ids`.
+- Accepting a candidate must persist the primary reference id to
+  `source_fragment_id` and keep all ids in item metadata.
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior |
+| --- | --- |
+| References exist and LLM returns valid ids | Preserve ids and quote mode |
+| References exist but LLM returns empty ids | Backfill one reference id and use `adapted` |
+| References do not exist | Keep `original` and empty ids |
+| LLM returns ids not present in retrieved references | Drop invalid ids before backfill |
+
+### 5. Good/Base/Bad Cases
+
+- Good: a candidate item adapted from a retrieved hook has
+  `quote_mode = adapted` and `reference_fragment_ids` containing that hook id.
+- Base: a genuinely new transition sentence may be original only when no
+  references are available or the backend cannot match one.
+- Bad: UI shows `参考 10 个片段` while every generated item has
+  `quote_mode = original` and empty ids because the LLM omitted provenance.
+
+### 6. Tests Required
+
+- API test where the LLM returns valid ids and they survive normalization.
+- API test where references exist but the LLM omits ids; assert backend
+  backfills ids and changes quote mode to `adapted`.
+- API test where no references match; assert all ids remain empty and quote
+  mode stays `original`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```json
+{"quote_mode": "original", "reference_fragment_ids": []}
+```
+
+for every item while `reference_fragments` contains usable matches.
+
+#### Correct
+
+```json
+{"quote_mode": "adapted", "reference_fragment_ids": ["fragment-id"]}
+```
+
+when a generated item is grounded in retrieved material.
+
 ## Copy Asset Delete Contract
 
 - `DELETE /api/copy/assets/{asset_id}` deletes imported copy assets that are still pending review.

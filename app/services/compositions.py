@@ -305,6 +305,8 @@ def _build_prompt(
         "Each candidate must contain exactly 5 items with roles: hook, pain_point, solution, proof, cta.\n"
         "You may directly quote a reference fragment when it is suitable, but mark quote_mode as direct. "
         "Use adapted for rewritten source material and original for new text.\n"
+        "When reference_fragments is not empty, each candidate must use at least 3 reference-backed items. "
+        "For every direct or adapted item, include valid reference_fragment_ids from Context JSON.\n"
         "If there are no reference fragments, all items must use quote_mode original and empty reference_fragment_ids.\n"
         "Return this JSON shape: "
         '{"candidates":[{"title":"","strategy":"","items":[{"role":"hook","position":"opening","text":"","quote_mode":"original","reference_fragment_ids":[],"source_copy_id":null,"reason":""}]}]}\n'
@@ -361,6 +363,11 @@ def _normalize_candidate_items(
             continue
         reference_ids = [item for item in raw.reference_fragment_ids if item in references_by_id]
         quote_mode = raw.quote_mode if raw.quote_mode in {"direct", "adapted", "original"} else "original"
+        if not reference_ids and references_by_id:
+            fallback_reference = _reference_for_item(role, raw.position, references_by_id)
+            if fallback_reference is not None:
+                reference_ids = [fallback_reference.id]
+                quote_mode = "adapted"
         if not reference_ids:
             quote_mode = "original"
         source_copy_id = raw.source_copy_id
@@ -378,6 +385,21 @@ def _normalize_candidate_items(
             )
         )
     return items
+
+
+def _reference_for_item(
+    role: str,
+    position: str | None,
+    references_by_id: dict[str, ReferenceFragmentSummary],
+) -> ReferenceFragmentSummary | None:
+    for reference in references_by_id.values():
+        if reference.role == role:
+            return reference
+    expected_position = position or POSITION_BY_ROLE.get(role)
+    for reference in references_by_id.values():
+        if reference.position == expected_position:
+            return reference
+    return next(iter(references_by_id.values()), None)
 
 
 def _fallback_candidate(brief: AutoCompositionBrief, index: int) -> CompositionCandidate:
