@@ -112,7 +112,7 @@ def check_milvus() -> DependencyStatus:
     started_at = perf_counter()
     endpoint = _safe_url(settings.milvus_uri)
     try:
-        request = Request(settings.milvus_uri, method="GET")
+        request = Request(_milvus_health_url(settings.milvus_uri), method="GET")
         with urlopen(request, timeout=CHECK_TIMEOUT_SECONDS) as response:
             status_code = response.status
     except (OSError, URLError, ValueError) as exc:
@@ -218,3 +218,18 @@ def _safe_url(value: str) -> str:
         fragment="",
     )
     return urlunsplit(redacted)
+
+
+def _milvus_health_url(value: str) -> str:
+    parsed = urlsplit(value)
+    if parsed.scheme in {"http", "https"} and parsed.port == 19530:
+        return urlunsplit(
+            SplitResult(
+                scheme=parsed.scheme,
+                netloc=f"{parsed.hostname or 'localhost'}:9091",
+                path="/healthz",
+                query="",
+                fragment="",
+            )
+        )
+    return value
