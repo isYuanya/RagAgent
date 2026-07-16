@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.core.llm import get_llm_client
 from app.db.session import SessionLocal
 from app.models.composition import AcceptedComposition as AcceptedCompositionModel
+from app.rag.retriever import CopyKnowledgeRetriever
 from app.schemas.composition import (
     AcceptCompositionRequest,
     AcceptCompositionResponse,
@@ -176,6 +177,14 @@ def accept_composition(payload: AcceptCompositionRequest) -> AcceptCompositionRe
 def retrieve_reference_fragments(brief: AutoCompositionBrief) -> list[ReferenceFragmentSummary]:
     fragments = []
     seen: set[str] = set()
+    semantic_matches = _retrieve_semantic_fragments(brief)
+    for item in semantic_matches:
+        if item.id in seen:
+            continue
+        seen.add(item.id)
+        fragments.append(_fragment_summary(item))
+        if len(fragments) >= 10:
+            return fragments[:10]
     for query in _reference_queries(brief):
         response = knowledge.list_fragments(
             page=1,
@@ -194,6 +203,31 @@ def retrieve_reference_fragments(brief: AutoCompositionBrief) -> list[ReferenceF
         if len(fragments) >= 10:
             break
     return fragments[:10]
+
+
+def _retrieve_semantic_fragments(brief: AutoCompositionBrief):
+    query = " ".join(_reference_queries(brief)).strip()
+    if not query:
+        return []
+    filters = {
+        "status": "approved",
+        "platform": brief.platform,
+        "purpose": brief.purpose,
+        "audience": brief.audience,
+    }
+    contexts = CopyKnowledgeRetriever().retrieve(query, limit=10, filters=filters)
+    fragments = []
+    seen: set[str] = set()
+    for context in contexts:
+        fragment_id = context.metadata.get("fragment_id")
+        if not isinstance(fragment_id, str) or fragment_id in seen:
+            continue
+        item = knowledge.get_fragment(fragment_id)
+        if item is None or item.status != "approved":
+            continue
+        seen.add(fragment_id)
+        fragments.append(item)
+    return fragments
 
 
 def _reference_queries(brief: AutoCompositionBrief) -> list[str]:

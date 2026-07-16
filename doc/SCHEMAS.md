@@ -323,3 +323,63 @@ New schemas live in `app/schemas/composition.py`:
 - `AcceptCompositionResponse`: accepted composition metadata plus the created `DraftDetail`.
 
 Composition item roles are fixed to `hook`, `pain_point`, `solution`, `proof`, and `cta`. `quote_mode` is `direct`, `adapted`, or `original`.
+
+## 10. Bulk Operation Schemas
+
+Bulk endpoints use an explicit confirmation field and return one shared statistics shape.
+
+### BulkOperationResponse
+
+```json
+{
+  "matched_count": 2,
+  "deleted_count": 2,
+  "archived_count": 0,
+  "skipped_count": 0,
+  "failed_count": 0,
+  "item_ids": ["id-1", "id-2"],
+  "errors": []
+}
+```
+
+### CopyAssetBulkDeleteRequest
+
+Used by `POST /api/copy/assets/bulk-delete`.
+
+```json
+{
+  "confirm": true,
+  "status": "pending_review",
+  "industry": null,
+  "platform": null,
+  "collection_id": null,
+  "asset_ids": null
+}
+```
+
+### RawCopyBulkDeleteRequest
+
+Used by `POST /api/knowledge/raw-copies/bulk-delete`.
+
+```json
+{
+  "confirm": true,
+  "collection_id": null,
+  "status": null,
+  "industry": null,
+  "platform": null,
+  "raw_copy_ids": null
+}
+```
+
+### DraftBulkArchiveRequest
+
+Used by `POST /api/drafts/bulk-archive`.
+
+```json
+{
+  "confirm": true,
+  "status": "draft",
+  "draft_ids": null
+}
+```

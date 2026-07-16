@@ -4,6 +4,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.schemas.copy import CopyAssetSummary
+from app.schemas.copy import BulkOperationResponse
 from app.schemas.knowledge import FragmentExtractionResult
 
 
@@ -234,6 +235,16 @@ class DraftVideoExportListResponse(BaseModel):
     page: int = Field(ge=1)
     page_size: int = Field(ge=1, le=100)
     total: int = Field(ge=0)
+
+
+class DraftBulkArchiveRequest(BaseModel):
+    confirm: bool = False
+    status: DraftStatus | None = "draft"
+    draft_ids: list[str] | None = None
+
+
+class DraftBulkArchiveResponse(BulkOperationResponse):
+    pass
 
 
 def _compact_text(value: str) -> str:

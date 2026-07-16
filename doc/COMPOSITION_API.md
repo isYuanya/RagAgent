@@ -67,6 +67,16 @@ Rules:
 - If no matching approved fragments exist, `fallback_reason` is `no_matching_fragments`; all item `quote_mode` values are `original` and references are empty.
 - Unaccepted candidates are transient task result data and are not persisted as standalone rows.
 
+## Semantic Retrieval Upgrade
+
+Reference retrieval now tries semantic search first:
+
+- Backend embeds the brief keywords with `EMBEDDING_MODEL`.
+- Backend searches approved fragments in Milvus using `MILVUS_URI`.
+- Structured filters from the brief are still applied: `platform`, `purpose`, and `audience`.
+- If embedding or Milvus is unavailable, backend falls back to the existing keyword search against `/api/knowledge/fragments?q=...`.
+- The response contract is unchanged: `reference_fragments`, candidates, and acceptance payloads keep the same shape.
+
 ## Accepting A Candidate
 
 `POST /api/compositions/accepted`

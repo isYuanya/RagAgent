@@ -1,8 +1,10 @@
 from fastapi import APIRouter, HTTPException, Query
 
 from app.schemas.copy import (
+    BulkOperationResponse,
     CopyAnalysisRequest,
     CopyAnalysisResponse,
+    CopyAssetBulkDeleteRequest,
     CopyAssetListResponse,
     CopyAssetReviewRequest,
     CopyAssetSummary,
@@ -10,12 +12,14 @@ from app.schemas.copy import (
 )
 from app.schemas.task import TaskResponse
 from app.services.copy_assets import (
+    bulk_delete_copy_assets,
     delete_copy_asset,
     get_copy_asset,
     list_copy_assets,
     review_copy_asset,
 )
 from app.services.fragment_extraction import extract_fragments_for_asset_id
+from app.services import knowledge
 from app.services.knowledge_sync import sync_asset_analysis_to_knowledge
 from app.workers.import_queue import enqueue_copy_import, enqueue_text_import
 from app.workflows.copy_analysis import run_analysis_workflow
@@ -85,6 +89,15 @@ def delete_asset(asset_id: str) -> None:
         raise HTTPException(status_code=409, detail="Only pending_review assets can be deleted")
     if result == "unavailable":
         raise HTTPException(status_code=503, detail="Database is unavailable; copy asset was not deleted")
+    knowledge.cleanup_source_references(asset_id)
+
+
+@router.post("/assets/bulk-delete", response_model=BulkOperationResponse)
+def bulk_delete_assets(payload: CopyAssetBulkDeleteRequest) -> BulkOperationResponse:
+    result = bulk_delete_copy_assets(payload)
+    for asset_id in result.item_ids:
+        knowledge.cleanup_source_references(asset_id)
+    return result
 
 
 def _llm_http_error(exc: RuntimeError) -> HTTPException:

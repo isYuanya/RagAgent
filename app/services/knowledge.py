@@ -15,6 +15,12 @@ from app.models.knowledge import (
     KnowledgeTemplate,
     copy_source_collections,
 )
+from app.rag.retriever import (
+    VectorDocument,
+    delete_fragment_vectors,
+    fragment_vector_id,
+    upsert_fragment_vector,
+)
 from app.schemas.copy import CopyAnalysisRequest, CopyAnalysisResponse
 from app.schemas.knowledge import (
     AnalysisCreate,
@@ -28,7 +34,9 @@ from app.schemas.knowledge import (
     KnowledgeCollectionCreate,
     KnowledgeCollectionListResponse,
     KnowledgeCollectionUpdate,
+    KnowledgeBulkOperationResponse,
     KnowledgeItemListResponse,
+    RawCopyBulkDeleteRequest,
     RawCopyCreate,
     RawCopyListResponse,
     RawCopySummary,
@@ -190,8 +198,48 @@ def update_raw_copy(raw_copy_id: str, payload: RawCopyUpdate) -> RawCopySummary 
 def delete_raw_copy(raw_copy_id: str) -> str:
     result = delete_copy_asset_record(raw_copy_id)
     if result == "deleted":
+        cleanup_source_references(raw_copy_id)
         _store.raw_deleted.add(raw_copy_id)
     return result
+
+
+def bulk_delete_raw_copies(payload: RawCopyBulkDeleteRequest) -> KnowledgeBulkOperationResponse:
+    if not payload.confirm:
+        return KnowledgeBulkOperationResponse(
+            matched_count=0,
+            deleted_count=0,
+            skipped_count=0,
+            failed_count=1,
+            errors=[{"id": "*", "error": "Bulk delete requires confirm=true."}],
+        )
+    candidates = list_copy_assets(
+        page=1,
+        page_size=100,
+        status=payload.status,
+        industry=payload.industry,
+        platform=payload.platform,
+        collection_id=payload.collection_id,
+    ).items
+    if payload.raw_copy_ids is not None:
+        allowed = set(payload.raw_copy_ids)
+        candidates = [item for item in candidates if item.id in allowed]
+
+    deleted: list[str] = []
+    errors: list[dict[str, str]] = []
+    for asset in candidates:
+        result = delete_raw_copy(asset.id)
+        if result == "deleted":
+            deleted.append(asset.id)
+        elif result != "not_found":
+            errors.append({"id": asset.id, "error": result})
+    return KnowledgeBulkOperationResponse(
+        matched_count=len(candidates),
+        deleted_count=len(deleted),
+        skipped_count=len(candidates) - len(deleted) - len(errors),
+        failed_count=len(errors),
+        item_ids=deleted,
+        errors=errors,
+    )
 
 
 def list_analyses(page: int = 1, page_size: int = 20) -> AnalysisListResponse:
@@ -391,8 +439,11 @@ def list_fragments(
 def create_fragment(payload: FragmentCreate) -> FragmentItem:
     db_item = _db_create_fragment(payload)
     if db_item is not None:
+        _sync_fragment_vector(db_item)
         return db_item
-    return _crud_create(payload, FragmentItem, _store.fragments)
+    item = _crud_create(payload, FragmentItem, _store.fragments)
+    _sync_fragment_vector(item)
+    return item
 
 
 def get_fragment(item_id: str) -> FragmentItem | None:
@@ -403,15 +454,44 @@ def get_fragment(item_id: str) -> FragmentItem | None:
 def update_fragment(item_id: str, payload: FragmentUpdate) -> FragmentItem | None:
     db_item = _db_update_fragment(item_id, payload)
     if db_item is not None:
+        _sync_fragment_vector(db_item)
         return db_item
-    return _crud_update(item_id, payload, _store.fragments, _store.deleted_fragments)
+    item = _crud_update(item_id, payload, _store.fragments, _store.deleted_fragments)
+    if item is not None:
+        _sync_fragment_vector(item)
+    return item
 
 
 def delete_fragment(item_id: str) -> bool:
     db_result = _db_delete_item(KnowledgeFragment, item_id)
     if db_result is not None:
+        if db_result:
+            delete_fragment_vectors([item_id])
         return db_result
-    return _crud_delete(item_id, _store.fragments, _store.deleted_fragments)
+    deleted = _crud_delete(item_id, _store.fragments, _store.deleted_fragments)
+    if deleted:
+        delete_fragment_vectors([item_id])
+    return deleted
+
+
+def delete_fragments_for_source_copy(source_copy_id: str) -> int:
+    response = list_fragments(page=1, page_size=100, source_copy_id=source_copy_id)
+    deleted = 0
+    for item in response.items:
+        if isinstance(item, FragmentItem) and delete_fragment(item.id):
+            deleted += 1
+    return deleted
+
+
+def cleanup_source_references(raw_copy_id: str) -> None:
+    delete_fragments_for_source_copy(raw_copy_id)
+    for item in list_templates(page=1, page_size=100).items:
+        if not isinstance(item, TemplateItem):
+            continue
+        if item.source and item.source.source_id == raw_copy_id:
+            delete_template(item.id)
+    _store.deleted_analyses.add(raw_copy_id)
+    _mark_projected_analysis_deleted(raw_copy_id)
 
 
 def _to_raw_summary(raw_copy_id: str) -> RawCopySummary | None:
@@ -1049,6 +1129,34 @@ def _fragment_matches(item: FragmentItem, filters: dict[str, str | None], q: str
     return any(
         keyword in (value or "").lower()
         for value in (item.fragment_text, item.before_context, item.after_context)
+    )
+
+
+def _sync_fragment_vector(item: FragmentItem) -> None:
+    if item.status != "approved":
+        delete_fragment_vectors([item.id])
+        return
+    text_parts = [
+        item.fragment_text,
+        item.before_context or "",
+        item.after_context or "",
+    ]
+    upsert_fragment_vector(
+        VectorDocument(
+            id=fragment_vector_id(item.id),
+            text="\n".join(part for part in text_parts if part).strip(),
+            metadata={
+                "fragment_id": item.id,
+                "source_copy_id": item.source_copy_id,
+                "fragment_role": item.fragment_role,
+                "position": item.position,
+                "platform": item.platform,
+                "purpose": item.purpose,
+                "audience": item.audience,
+                "industry": item.industry,
+                "status": item.status,
+            },
+        )
     )
 
 

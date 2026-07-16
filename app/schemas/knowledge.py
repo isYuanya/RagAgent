@@ -3,6 +3,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from app.schemas.copy import CopyAnalysisResponse, CopyAssetSummary
+from app.schemas.copy import BulkOperationResponse
 
 
 SourceType = Literal["raw_copy", "analysis"]
@@ -196,3 +197,16 @@ class KnowledgeItemListResponse(BaseModel):
     page: int = Field(ge=1)
     page_size: int = Field(ge=1, le=100)
     total: int = Field(ge=0)
+
+
+class RawCopyBulkDeleteRequest(BaseModel):
+    confirm: bool = False
+    collection_id: str | None = None
+    status: Literal["pending_review", "approved", "rejected"] | None = None
+    industry: str | None = None
+    platform: str | None = None
+    raw_copy_ids: list[str] | None = None
+
+
+class KnowledgeBulkOperationResponse(BulkOperationResponse):
+    pass

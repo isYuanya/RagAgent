@@ -14,8 +14,10 @@ from app.db.session import SessionLocal
 from app.models.copy import CopyAnalysis, CopySource
 from app.models.knowledge import KnowledgeCollection, copy_source_collections
 from app.schemas.copy import (
+    BulkOperationResponse,
     CopyAnalysisRequest,
     CopyAnalysisResponse,
+    CopyAssetBulkDeleteRequest,
     CopyAssetListResponse,
     CopyAssetReviewRequest,
     CopyAssetSummary,
@@ -166,6 +168,49 @@ def delete_copy_asset(asset_id: str) -> Literal["deleted", "not_found", "conflic
         return "conflict"
     _copy_assets.pop(asset_id, None)
     return "deleted"
+
+
+def bulk_delete_copy_assets(payload: CopyAssetBulkDeleteRequest) -> BulkOperationResponse:
+    if not payload.confirm:
+        return BulkOperationResponse(
+            matched_count=0,
+            deleted_count=0,
+            skipped_count=0,
+            failed_count=1,
+            errors=[{"id": "*", "error": "Bulk delete requires confirm=true."}],
+        )
+    candidates = list_copy_assets(
+        page=1,
+        page_size=100,
+        status=payload.status,
+        industry=payload.industry,
+        platform=payload.platform,
+        collection_id=payload.collection_id,
+    ).items
+    if payload.asset_ids is not None:
+        allowed = set(payload.asset_ids)
+        candidates = [item for item in candidates if item.id in allowed]
+
+    deleted: list[str] = []
+    errors: list[dict[str, str]] = []
+    skipped = 0
+    for asset in candidates:
+        result = delete_copy_asset(asset.id)
+        if result == "deleted":
+            deleted.append(asset.id)
+        elif result == "conflict":
+            skipped += 1
+            errors.append({"id": asset.id, "error": "Only pending_review assets can be deleted."})
+        else:
+            errors.append({"id": asset.id, "error": result})
+    return BulkOperationResponse(
+        matched_count=len(candidates),
+        deleted_count=len(deleted),
+        skipped_count=skipped,
+        failed_count=len(errors) - skipped,
+        item_ids=deleted,
+        errors=errors,
+    )
 
 
 def delete_copy_asset_record(asset_id: str) -> Literal["deleted", "not_found", "unavailable"]:

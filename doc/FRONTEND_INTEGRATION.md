@@ -593,3 +593,61 @@ Important display rules:
 - Accepted candidates become normal drafts. Unaccepted candidates remain only in the task result.
 
 Request and response examples are documented in `doc/COMPOSITION_API.md`.
+
+## Bulk Operations and Semantic Retrieval
+
+### Review Workbench Bulk Delete
+
+```text
+POST /api/copy/assets/bulk-delete
+```
+
+```json
+{
+  "confirm": true,
+  "status": "pending_review",
+  "industry": "beauty",
+  "platform": "xhs",
+  "collection_id": null,
+  "asset_ids": null
+}
+```
+
+- `confirm` must be `true`; frontend should show a delete confirmation before calling.
+- Backend deletes only matching `pending_review` assets by default.
+- Backend also clears derived knowledge references and Milvus fragment vectors after successful deletion.
+
+### Knowledge Library Bulk Delete
+
+```text
+POST /api/knowledge/raw-copies/bulk-delete
+```
+
+```json
+{
+  "confirm": true,
+  "collection_id": "collection-id",
+  "status": "approved",
+  "industry": null,
+  "platform": null,
+  "raw_copy_ids": null
+}
+```
+
+After deletion, raw copy detail, fragment lists, keyword search, and semantic retrieval should no longer return the deleted content.
+
+### Draft Bulk Archive
+
+```text
+POST /api/drafts/bulk-archive
+```
+
+```json
+{
+  "confirm": true,
+  "status": "draft",
+  "draft_ids": ["draft-id-1", "draft-id-2"]
+}
+```
+
+Archiving only updates draft status to `archived`. It does not delete draft items, versions, video export history, attachments, or local files.

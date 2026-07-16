@@ -177,6 +177,28 @@ def test_auto_composition_task_returns_three_candidates_with_references(monkeypa
     ]
 
 
+def test_auto_composition_prefers_semantic_fragment_retrieval(monkeypatch) -> None:
+    global _current_fragment_id
+    _current_fragment_id = _create_approved_fragment()
+
+    class FakeRetriever:
+        def retrieve(self, query, limit=5, filters=None):
+            assert "routine" in query
+            assert filters["status"] == "approved"
+            return [
+                type(
+                    "Retrieved",
+                    (),
+                    {"metadata": {"fragment_id": _current_fragment_id}},
+                )()
+            ]
+
+    monkeypatch.setattr("app.services.compositions.CopyKnowledgeRetriever", lambda: FakeRetriever())
+    task_payload = _run_composition(monkeypatch, FakeCompositionLLMClient())
+
+    assert task_payload["result"]["reference_fragments"][0]["id"] == _current_fragment_id
+
+
 def test_auto_composition_falls_back_without_matching_fragments(monkeypatch) -> None:
     task_payload = _run_composition(monkeypatch, EmptyReferenceLLMClient())
     result = task_payload["result"]

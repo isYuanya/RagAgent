@@ -196,6 +196,35 @@ def test_draft_item_requires_source_fragment_or_text() -> None:
     assert manual_response.json()["current_text"] == "Manual sentence"
 
 
+def test_bulk_archive_drafts_preserves_history() -> None:
+    first = client.post("/api/drafts", json={"title": "Archive one"}).json()
+    second = client.post("/api/drafts", json={"title": "Archive two"}).json()
+    client.post(f"/api/drafts/{first['id']}/items", json={"edited_text": "First text"})
+    version_response = client.post(
+        f"/api/drafts/{first['id']}/versions",
+        json={"label": "before archive"},
+    )
+    assert version_response.status_code == 200
+
+    response = client.post(
+        "/api/drafts/bulk-archive",
+        json={"confirm": True, "status": "draft", "draft_ids": [first["id"], second["id"]]},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["matched_count"] == 2
+    assert payload["archived_count"] == 2
+    assert client.get("/api/drafts").json()["total"] == 0
+    assert client.get("/api/drafts?status=archived").json()["total"] == 2
+    detail_response = client.get(f"/api/drafts/{first['id']}")
+    assert detail_response.status_code == 200
+    assert detail_response.json()["current_text"] == "First text"
+    versions_response = client.get(f"/api/drafts/{first['id']}/versions")
+    assert versions_response.status_code == 200
+    assert len(versions_response.json()) == 1
+
+
 def test_approve_draft_creates_raw_copy_and_fragments(monkeypatch) -> None:
     monkeypatch.setattr(
         "app.services.fragment_extraction.get_llm_client",

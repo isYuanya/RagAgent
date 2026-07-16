@@ -1,6 +1,8 @@
 from fastapi import APIRouter, HTTPException, Query
 
 from app.schemas.draft import (
+    DraftBulkArchiveRequest,
+    DraftBulkArchiveResponse,
     DraftApprovalResponse,
     DraftCreate,
     DraftDetail,
@@ -42,6 +44,11 @@ def list_drafts(
 @router.post("", response_model=DraftDetail)
 def create_draft(payload: DraftCreate):
     return drafts.create_draft(payload)
+
+
+@router.post("/bulk-archive", response_model=DraftBulkArchiveResponse)
+def bulk_archive_drafts(payload: DraftBulkArchiveRequest):
+    return drafts.bulk_archive_drafts(payload)
 
 
 @router.get("/{draft_id}", response_model=DraftDetail)

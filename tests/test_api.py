@@ -670,6 +670,34 @@ def test_delete_pending_review_copy_asset(monkeypatch) -> None:
     assert all(item["id"] != asset_id for item in list_response.json()["items"])
 
 
+def test_bulk_delete_pending_review_copy_assets(monkeypatch) -> None:
+    reset_copy_asset_store()
+    reset_knowledge_store()
+    monkeypatch.setattr("app.services.copy_analysis.get_llm_client", lambda: FakeLLMClient())
+    monkeypatch.setattr("app.api.routes.copy.enqueue_text_import", lambda text, collection_ids=None: __import__(
+        "app.services.copy_import_jobs", fromlist=["run_text_import_task"]
+    ).run_text_import_task(text, collection_ids=collection_ids or []))
+
+    first = client.post("/api/copy/import", json={"text": "delete bulk one"}).json()["result"][
+        "asset_ids"
+    ][0]
+    second = client.post("/api/copy/import", json={"text": "delete bulk two"}).json()["result"][
+        "asset_ids"
+    ][0]
+
+    response = client.post(
+        "/api/copy/assets/bulk-delete",
+        json={"confirm": True, "status": "pending_review", "asset_ids": [first, second]},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["matched_count"] == 2
+    assert payload["deleted_count"] == 2
+    assert set(payload["item_ids"]) == {first, second}
+    assert client.get("/api/copy/assets?status=pending_review").json()["total"] == 0
+
+
 def test_db_backed_copy_asset_delete_does_not_fall_back_to_cache_only(monkeypatch) -> None:
     reset_copy_asset_store()
     asset = CopyAssetSummary(

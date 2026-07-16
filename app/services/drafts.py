@@ -11,6 +11,8 @@ from app.models.draft import Draft as DraftModel
 from app.models.draft import DraftItem as DraftItemModel
 from app.models.draft import DraftVersion as DraftVersionModel
 from app.schemas.draft import (
+    DraftBulkArchiveRequest,
+    DraftBulkArchiveResponse,
     DraftApprovalResponse,
     DraftCreate,
     DraftDetail,
@@ -137,6 +139,39 @@ def update_draft(draft_id: str, payload: DraftUpdate) -> DraftDetail | None:
 def archive_draft(draft_id: str) -> bool:
     payload = DraftUpdate(status="archived")
     return update_draft(draft_id, payload) is not None
+
+
+def bulk_archive_drafts(payload: DraftBulkArchiveRequest) -> DraftBulkArchiveResponse:
+    if not payload.confirm:
+        return DraftBulkArchiveResponse(
+            matched_count=0,
+            deleted_count=0,
+            archived_count=0,
+            skipped_count=0,
+            failed_count=1,
+            errors=[{"id": "*", "error": "Bulk archive requires confirm=true."}],
+        )
+    candidates = list_drafts(page=1, page_size=100, status=payload.status).items
+    if payload.draft_ids is not None:
+        allowed = set(payload.draft_ids)
+        candidates = [item for item in candidates if item.id in allowed]
+
+    archived: list[str] = []
+    errors: list[dict[str, str]] = []
+    for draft in candidates:
+        if archive_draft(draft.id):
+            archived.append(draft.id)
+        else:
+            errors.append({"id": draft.id, "error": "not_found"})
+    return DraftBulkArchiveResponse(
+        matched_count=len(candidates),
+        deleted_count=0,
+        archived_count=len(archived),
+        skipped_count=len(candidates) - len(archived) - len(errors),
+        failed_count=len(errors),
+        item_ids=archived,
+        errors=errors,
+    )
 
 
 def approve_draft(draft_id: str) -> DraftApprovalResponse:

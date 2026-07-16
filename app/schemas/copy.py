@@ -85,3 +85,22 @@ class CopyImportResponse(BaseModel):
 class CopyAssetReviewRequest(BaseModel):
     status: str = Field(pattern="^(pending_review|approved|rejected)$")
     reviewed_analysis: CopyAnalysisResponse
+
+
+class CopyAssetBulkDeleteRequest(BaseModel):
+    confirm: bool = False
+    status: str | None = Field(default="pending_review", pattern="^(pending_review|approved|rejected)$")
+    industry: str | None = None
+    platform: str | None = None
+    collection_id: str | None = None
+    asset_ids: list[str] | None = None
+
+
+class BulkOperationResponse(BaseModel):
+    matched_count: int = Field(ge=0)
+    deleted_count: int = Field(ge=0)
+    archived_count: int = Field(default=0, ge=0)
+    skipped_count: int = Field(ge=0)
+    failed_count: int = Field(ge=0)
+    item_ids: list[str] = Field(default_factory=list)
+    errors: list[dict[str, str]] = Field(default_factory=list)

@@ -10,12 +10,14 @@ from app.schemas.knowledge import (
     FragmentExtractionResult,
     FragmentItem,
     FragmentUpdate,
+    KnowledgeBulkOperationResponse,
     KnowledgeCollection,
     KnowledgeCollectionCreate,
     KnowledgeCollectionListResponse,
     KnowledgeCollectionUpdate,
     KnowledgeItemListResponse,
     RawCopyCreate,
+    RawCopyBulkDeleteRequest,
     RawCopyListResponse,
     RawCopySummary,
     RawCopyUpdate,
@@ -109,6 +111,11 @@ def delete_raw_copy(raw_copy_id: str):
         raise HTTPException(status_code=404, detail="Raw copy not found")
     if result == "unavailable":
         raise HTTPException(status_code=503, detail="Database is unavailable; raw copy was not deleted")
+
+
+@router.post("/raw-copies/bulk-delete", response_model=KnowledgeBulkOperationResponse)
+def bulk_delete_raw_copies(payload: RawCopyBulkDeleteRequest):
+    return knowledge.bulk_delete_raw_copies(payload)
 
 
 @router.get("/analyses", response_model=AnalysisListResponse)

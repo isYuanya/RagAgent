@@ -169,6 +169,89 @@ def test_fragment_crud_and_filters() -> None:
     assert client.get(f"/api/knowledge/fragments/{fragment['id']}").status_code == 404
 
 
+def test_fragment_vector_sync_on_create_update_delete(monkeypatch) -> None:
+    upserted = []
+    deleted = []
+    monkeypatch.setattr("app.services.knowledge.upsert_fragment_vector", lambda document: upserted.append(document) or True)
+    monkeypatch.setattr("app.services.knowledge.delete_fragment_vectors", lambda ids: deleted.extend(ids) or True)
+
+    raw_response = client.post("/api/knowledge/raw-copies", json={"source_text": "vector source"})
+    raw_id = raw_response.json()["id"]
+    create_response = client.post(
+        "/api/knowledge/fragments",
+        json={
+            "source_copy_id": raw_id,
+            "sequence_order": 0,
+            "fragment_text": "semantic fragment",
+            "fragment_role": "hook",
+            "position": "opening",
+            "status": "approved",
+            "confidence": 0.9,
+        },
+    )
+    assert create_response.status_code == 200
+    fragment_id = create_response.json()["id"]
+    assert upserted[-1].metadata["fragment_id"] == fragment_id
+
+    update_response = client.patch(
+        f"/api/knowledge/fragments/{fragment_id}",
+        json={"status": "pending_review"},
+    )
+    assert update_response.status_code == 200
+    assert fragment_id in deleted
+
+    delete_response = client.delete(f"/api/knowledge/fragments/{fragment_id}")
+    assert delete_response.status_code == 204
+    assert deleted.count(fragment_id) >= 2
+
+
+def test_bulk_delete_raw_copies_cleans_fragments_and_templates(monkeypatch) -> None:
+    deleted_vectors = []
+    monkeypatch.setattr("app.services.knowledge.delete_fragment_vectors", lambda ids: deleted_vectors.extend(ids) or True)
+    raw_response = client.post(
+        "/api/knowledge/raw-copies",
+        json={"source_text": "bulk raw", "platform": "xhs"},
+    )
+    raw_id = raw_response.json()["id"]
+    fragment_response = client.post(
+        "/api/knowledge/fragments",
+        json={
+            "source_copy_id": raw_id,
+            "sequence_order": 0,
+            "fragment_text": "bulk fragment",
+            "fragment_role": "hook",
+            "position": "opening",
+            "status": "approved",
+            "confidence": 0.9,
+        },
+    )
+    fragment_id = fragment_response.json()["id"]
+    template_response = client.post(
+        "/api/knowledge/templates",
+        json={
+            "title": "source template",
+            "content": "template",
+            "source": {"source_type": "raw_copy", "source_id": raw_id},
+        },
+    )
+    template_id = template_response.json()["id"]
+
+    response = client.post(
+        "/api/knowledge/raw-copies/bulk-delete",
+        json={"confirm": True, "platform": "xhs", "raw_copy_ids": [raw_id]},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["matched_count"] == 1
+    assert payload["deleted_count"] == 1
+    assert raw_id in payload["item_ids"]
+    assert client.get(f"/api/knowledge/raw-copies/{raw_id}").status_code == 404
+    assert client.get(f"/api/knowledge/fragments/{fragment_id}").status_code == 404
+    assert client.get(f"/api/knowledge/templates/{template_id}").status_code == 404
+    assert fragment_id in deleted_vectors
+
+
 def test_copy_import_populates_raw_copy_and_analysis_libraries(monkeypatch) -> None:
     monkeypatch.setattr("app.services.copy_analysis.get_llm_client", lambda: FakeLLMClient())
     monkeypatch.setattr("app.api.routes.copy.enqueue_copy_import", lambda csv_text, collection_ids=None: __import__(
