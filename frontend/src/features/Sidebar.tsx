@@ -3,6 +3,7 @@ import {
   Database,
   FileText,
   Library,
+  ListOrdered,
   NotebookPen,
   ServerCog,
   ShieldCheck
@@ -14,6 +15,7 @@ export type AppView =
   | "drafts"
   | "assistant"
   | "diagnostics"
+  | "keyword-rankings"
   | "knowledge"
   | "system";
 
@@ -41,7 +43,7 @@ export function Sidebar({
       <div className="mt-8 space-y-1.5">
         <SidebarItem
           icon={<FileText className="size-4" />}
-          label="审核工作台"
+          label="审稿工作台"
           active={view === "workbench"}
           onClick={() => onChangeView("workbench")}
         />
@@ -62,6 +64,12 @@ export function Sidebar({
           label="文案诊断"
           active={view === "diagnostics"}
           onClick={() => onChangeView("diagnostics")}
+        />
+        <SidebarItem
+          icon={<ListOrdered className="size-4" />}
+          label="关键词榜单"
+          active={view === "keyword-rankings"}
+          onClick={() => onChangeView("keyword-rankings")}
         />
         <SidebarItem
           icon={<Library className="size-4" />}

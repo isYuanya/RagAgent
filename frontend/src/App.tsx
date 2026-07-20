@@ -11,6 +11,7 @@ import { DraftWorkbenchView } from "@/features/drafts/DraftWorkbenchView";
 import { DiagnosticView } from "@/features/diagnostics/DiagnosticView";
 import { SmartCompositionView } from "@/features/assistant/SmartCompositionView";
 import { KnowledgeView } from "@/features/knowledge/KnowledgeView";
+import { KeywordRankingsView } from "@/features/keyword-rankings/KeywordRankingsView";
 import { SystemStatusBadge } from "@/features/system/SystemStatusBadge";
 import { SystemStatusView } from "@/features/system/SystemStatusView";
 import { getService, isServiceDown } from "@/features/system/statusUtils";
@@ -317,6 +318,8 @@ export function App() {
         <SmartCompositionView headerAction={statusBadge} />
       ) : view === "diagnostics" ? (
         <DiagnosticView headerAction={statusBadge} />
+      ) : view === "keyword-rankings" ? (
+        <KeywordRankingsView headerAction={statusBadge} />
       ) : view === "knowledge" ? (
         <KnowledgeView headerAction={statusBadge} />
       ) : (

@@ -12,6 +12,13 @@
   KnowledgeStatsResponse,
   KnowledgeTemplate,
   KnowledgeTemplateCreate,
+  KeywordGroup,
+  KeywordGroupCreate,
+  KeywordIndustry,
+  KeywordIndustryCreate,
+  KeywordVideo,
+  KeywordVideoImportRequest,
+  KeywordVideoImportResponse,
   FragmentFilters,
   DraftCreate,
   DraftDetail,
@@ -157,6 +164,87 @@ export async function fetchSystemStatus(): Promise<SystemStatusResponse> {
   const response = await fetch(`${apiBase}/api/system/status`);
   if (!response.ok) throw new Error("加载服务状态失败");
   return (await response.json()) as SystemStatusResponse;
+}
+
+// ---- Keyword rankings ----
+
+const keywordRankingsBase = `${apiBase}/api`;
+
+export async function fetchKeywordIndustriesPage(
+  page = 1,
+  pageSize = DEFAULT_PAGE_SIZE
+): Promise<ListResponse<KeywordIndustry>> {
+  const params = new URLSearchParams({
+    page: String(page),
+    page_size: String(pageSize)
+  });
+  const response = await fetch(`${keywordRankingsBase}/keyword-industries?${params}`);
+  if (!response.ok) throw new Error("加载关键词行业失败");
+  return (await response.json()) as ListResponse<KeywordIndustry>;
+}
+
+export function createKeywordIndustry(
+  body: KeywordIndustryCreate
+): Promise<KeywordIndustry> {
+  return writeJson(
+    `${keywordRankingsBase}/keyword-industries`,
+    "POST",
+    body,
+    "创建行业失败"
+  );
+}
+
+export function deleteKeywordIndustry(id: string): Promise<void> {
+  return deleteResource(`${keywordRankingsBase}/keyword-industries/${id}`, "删除行业失败");
+}
+
+export async function fetchKeywordGroupsPage(
+  industryId: string,
+  page = 1,
+  pageSize = DEFAULT_PAGE_SIZE
+): Promise<ListResponse<KeywordGroup>> {
+  const params = new URLSearchParams({
+    page: String(page),
+    page_size: String(pageSize)
+  });
+  const response = await fetch(
+    `${keywordRankingsBase}/keyword-industries/${industryId}/keywords?${params}`
+  );
+  if (!response.ok) throw new Error("加载关键词集合失败");
+  return (await response.json()) as ListResponse<KeywordGroup>;
+}
+
+export function createKeywordGroup(body: KeywordGroupCreate): Promise<KeywordGroup> {
+  return writeJson(`${keywordRankingsBase}/keywords`, "POST", body, "创建关键词失败");
+}
+
+export function deleteKeywordGroup(id: string): Promise<void> {
+  return deleteResource(`${keywordRankingsBase}/keywords/${id}`, "删除关键词失败");
+}
+
+export async function fetchKeywordVideosPage(
+  keywordId: string,
+  page = 1,
+  pageSize = 50
+): Promise<ListResponse<KeywordVideo>> {
+  const params = new URLSearchParams({
+    page: String(page),
+    page_size: String(pageSize)
+  });
+  const response = await fetch(`${keywordRankingsBase}/keywords/${keywordId}/videos?${params}`);
+  if (!response.ok) throw new Error("加载视频榜单失败");
+  return (await response.json()) as ListResponse<KeywordVideo>;
+}
+
+export function importKeywordVideos(
+  body: KeywordVideoImportRequest
+): Promise<KeywordVideoImportResponse> {
+  return writeJson(
+    `${keywordRankingsBase}/keyword-videos/import`,
+    "POST",
+    body,
+    "导入关键词视频失败"
+  );
 }
 
 // ---- Knowledge base ----

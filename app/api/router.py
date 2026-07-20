@@ -8,6 +8,7 @@ from app.api.routes import (
     feedback,
     generate,
     health,
+    keyword_rankings,
     knowledge,
     recommendations,
     smart_composition,
@@ -17,6 +18,7 @@ from app.api.routes import (
 
 api_router = APIRouter()
 api_router.include_router(health.router, tags=["health"])
+api_router.include_router(keyword_rankings.router, tags=["keyword-rankings"])
 api_router.include_router(copy.router, prefix="/copy", tags=["copy"])
 api_router.include_router(generate.router, prefix="/generate", tags=["generate"])
 api_router.include_router(tasks.router, prefix="/tasks", tags=["tasks"])

@@ -103,6 +103,83 @@ export type KnowledgeStatsResponse = {
   fragments: number;
 };
 
+// ---- Keyword rankings ----
+
+export type KeywordIndustryStatus = "active" | "inactive";
+
+export type KeywordIndustryCreate = {
+  name: string;
+  description?: string | null;
+  status?: KeywordIndustryStatus;
+};
+
+export type KeywordIndustry = {
+  id: string;
+  name: string;
+  description?: string | null;
+  status: KeywordIndustryStatus;
+  keyword_count: number;
+  video_count: number;
+  last_updated_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type KeywordGroupCreate = {
+  industry_id: string;
+  keyword: string;
+};
+
+export type KeywordGroup = {
+  id: string;
+  industry_id: string;
+  keyword: string;
+  video_count: number;
+  last_updated_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type KeywordVideo = {
+  id: string;
+  keyword_id: string;
+  rank: number;
+  source_text: string;
+  source_url?: string | null;
+  author_name?: string | null;
+  author_url?: string | null;
+  author_follower_count?: number | null;
+  platform?: string | null;
+  industry?: string | null;
+  audience?: string | null;
+  purpose?: string | null;
+  style?: string | null;
+  likes: number;
+  comments: number;
+  favorites: number;
+  shares: number;
+  hot_score: number;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type KeywordVideoImportRequest = {
+  industry_id: string;
+  keyword: string;
+  csv_text: string;
+};
+
+export type KeywordVideoImportResponse = {
+  industry_id: string;
+  keyword_id: string;
+  keyword: string;
+  created_count: number;
+  updated_count: number;
+  failed_count: number;
+  video_count: number;
+  errors: Array<{ row_number: number; message: string }>;
+};
+
 export type KnowledgeCollection = {
   id: string;
   name: string;
