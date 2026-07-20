@@ -230,9 +230,9 @@ export function KeywordRankingsView({
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-6">
+      <div className="min-h-0 flex-1 overflow-auto p-6">
         {loading ? (
-          <div className="grid items-start gap-4 lg:grid-cols-2">
+          <div className="grid min-w-[1120px] grid-cols-2 items-start gap-4">
             {Array.from({ length: 4 }).map((_, index) => (
               <Skeleton key={index} className="h-[440px] rounded-lg" />
             ))}
@@ -244,7 +244,7 @@ export function KeywordRankingsView({
             hint="在顶部输入关键词并添加榜单，或先导入 CSV 生成对应数据。"
           />
         ) : (
-          <div className="grid items-start gap-4 lg:grid-cols-2">
+          <div className="grid min-w-[1120px] grid-cols-2 items-start gap-4">
             {boards.map((board) => (
               <RankingCard
                 key={board.keyword.id}
