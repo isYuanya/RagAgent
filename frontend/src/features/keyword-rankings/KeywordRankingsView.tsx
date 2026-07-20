@@ -102,6 +102,14 @@ export function KeywordRankingsView({
     void loadBoards();
   }, [loadBoards]);
 
+  const searchKeyword = searchText.trim().toLowerCase();
+  const matchedBoards = searchKeyword
+    ? boards.filter((board) =>
+        board.keyword.keyword.toLowerCase().includes(searchKeyword)
+      )
+    : boards;
+  const visibleBoards = matchedBoards.slice(0, 2);
+
   async function ensureDefaultIndustry() {
     const active = industries.find((item) => item.status === "active");
     if (active) return active;
@@ -124,11 +132,12 @@ export function KeywordRankingsView({
     }
     setActionBusy(true);
     try {
-      const existingBoard = boards.find(
-        (board) => board.keyword.keyword.toLowerCase() === keywordText.toLowerCase()
+      const existingBoard = boards.find((board) =>
+        board.keyword.keyword.toLowerCase().includes(keywordText.toLowerCase())
       );
       if (existingBoard) {
         await refreshBoard(existingBoard.keyword.id);
+        setSearchText(existingBoard.keyword.keyword);
         toast.success("已刷新该关键词 Top10 榜单");
         return;
       }
@@ -140,9 +149,10 @@ export function KeywordRankingsView({
       });
       const videos = await loadTopVideos(keyword);
       setBoards((current) => [
-        ...current,
-        { industry, keyword, videos, loading: false }
+        { industry, keyword, videos, loading: false },
+        ...current.filter((board) => board.keyword.id !== keyword.id)
       ]);
+      setSearchText(keyword.keyword);
       toast.success(videos.length > 0 ? "榜单已添加" : "关键词已添加，可导入 CSV 后生成榜单");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "添加关键词榜单失败");
@@ -225,7 +235,7 @@ export function KeywordRankingsView({
           </div>
           <Button onClick={handleAddBoard} disabled={actionBusy}>
             {actionBusy ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-            添加榜单
+            搜索/添加
           </Button>
         </div>
       </header>
@@ -243,9 +253,15 @@ export function KeywordRankingsView({
             title="还没有关键词榜单"
             hint="在顶部输入关键词并添加榜单，或先导入 CSV 生成对应数据。"
           />
+        ) : visibleBoards.length === 0 ? (
+          <EmptyState
+            icon={<Search className="size-8" />}
+            title="没有匹配的关键词榜单"
+            hint="点击顶部“添加榜单”，系统会创建该关键词榜单；导入 CSV 后即可显示 Top10。"
+          />
         ) : (
           <div className="grid min-w-[1120px] grid-cols-2 items-start gap-4">
-            {boards.map((board) => (
+            {visibleBoards.map((board) => (
               <RankingCard
                 key={board.keyword.id}
                 board={board}
