@@ -232,7 +232,7 @@ export function KeywordRankingsView({
 
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
         {loading ? (
-          <div className="grid gap-4 xl:grid-cols-2">
+          <div className="grid items-start gap-4 lg:grid-cols-2">
             {Array.from({ length: 4 }).map((_, index) => (
               <Skeleton key={index} className="h-[440px] rounded-lg" />
             ))}
@@ -244,7 +244,7 @@ export function KeywordRankingsView({
             hint="在顶部输入关键词并添加榜单，或先导入 CSV 生成对应数据。"
           />
         ) : (
-          <div className="grid gap-4 xl:grid-cols-2">
+          <div className="grid items-start gap-4 lg:grid-cols-2">
             {boards.map((board) => (
               <RankingCard
                 key={board.keyword.id}
@@ -296,7 +296,7 @@ function RankingCard({
   onDelete: () => void;
 }) {
   return (
-    <Card className="flex h-[460px] min-w-0 flex-col overflow-hidden">
+    <Card className="flex h-[520px] min-w-0 flex-col overflow-hidden">
       <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -357,10 +357,12 @@ function RankingCard({
 
 function VideoRow({ video }: { video: KeywordVideo }) {
   return (
-    <div className="grid grid-cols-[42px_minmax(0,1fr)_108px] gap-3 px-4 py-3 text-sm">
+    <div className="grid min-h-[82px] grid-cols-[38px_minmax(0,1fr)_96px] gap-2 px-4 py-2.5 text-sm">
       <div className="font-semibold tabular-nums text-primary">#{video.rank}</div>
       <div className="min-w-0">
-        <div className="line-clamp-2 text-foreground">{video.source_text}</div>
+        <div className="max-h-10 overflow-hidden text-foreground [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
+          {video.source_text}
+        </div>
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
           <span>{video.author_name || "未知作者"}</span>
           <span>赞 {formatNumber(video.likes)}</span>
