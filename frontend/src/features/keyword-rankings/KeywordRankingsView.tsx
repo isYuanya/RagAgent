@@ -109,6 +109,12 @@ export function KeywordRankingsView({
       )
     : boards;
   const visibleBoards = matchedBoards.slice(0, 2);
+  const keywordHeatRankings = matchedBoards
+    .map((board) => ({
+      board,
+      heatScore: board.videos.reduce((total, video) => total + video.hot_score, 0)
+    }))
+    .sort((left, right) => right.heatScore - left.heatScore);
 
   async function ensureDefaultIndustry() {
     const active = industries.find((item) => item.status === "active");
@@ -238,6 +244,10 @@ export function KeywordRankingsView({
             搜索/添加
           </Button>
         </div>
+        <KeywordHeatRanking
+          rankings={keywordHeatRankings}
+          onSelect={(board) => setSearchText(board.keyword.keyword)}
+        />
       </header>
 
       <div className="min-h-0 flex-1 overflow-auto p-6">
@@ -367,6 +377,52 @@ function RankingCard({
           </div>
         )}
       </div>
+    </Card>
+  );
+}
+
+function KeywordHeatRanking({
+  rankings,
+  onSelect
+}: {
+  rankings: Array<{ board: RankingBoard; heatScore: number }>;
+  onSelect: (board: RankingBoard) => void;
+}) {
+  return (
+    <Card className="mt-4 max-w-5xl overflow-hidden p-0">
+      <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+        <div>
+          <h2 className="text-sm font-semibold">关键词热度排行</h2>
+          <p className="text-xs text-muted-foreground">按每个关键词 Top10 视频热度总和排序</p>
+        </div>
+        <Badge variant="outline">{rankings.length} 个关键词</Badge>
+      </div>
+      {rankings.length === 0 ? (
+        <div className="px-4 py-5 text-sm text-muted-foreground">
+          暂无匹配关键词，搜索后可添加新榜单。
+        </div>
+      ) : (
+        <div className="grid max-h-44 grid-cols-1 overflow-y-auto md:grid-cols-2">
+          {rankings.map(({ board, heatScore }, index) => (
+            <button
+              key={board.keyword.id}
+              type="button"
+              onClick={() => onSelect(board)}
+              className="flex min-w-0 items-center gap-3 border-b border-border px-4 py-3 text-left hover:bg-accent/40 md:[&:nth-child(odd)]:border-r"
+            >
+              <span className="w-7 shrink-0 text-sm font-semibold tabular-nums text-primary">
+                #{index + 1}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                {board.keyword.keyword}
+              </span>
+              <span className="shrink-0 text-sm font-semibold tabular-nums text-primary">
+                {formatNumber(heatScore)}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
     </Card>
   );
 }
