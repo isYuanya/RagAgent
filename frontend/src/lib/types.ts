@@ -57,7 +57,11 @@ export type TaskProgress = {
   failed_count: number;
   percent: number;
   current_message?: string | null;
-  errors: Array<{ row_number?: number; message?: string }>;
+  errors: Array<{
+    row_number?: number;
+    message?: string;
+    current_video?: Record<string, unknown>;
+  }>;
 };
 
 export type TaskResponse = {

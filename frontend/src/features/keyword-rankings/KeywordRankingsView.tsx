@@ -49,6 +49,18 @@ type RankingBoard = {
   loading: boolean;
 };
 
+type CurrentCrawlVideo = {
+  source_text?: string;
+  source_url?: string;
+  author_name?: string;
+  author_url?: string;
+  author_follower_count?: number;
+  likes?: number;
+  comments?: number;
+  favorites?: number;
+  shares?: number;
+};
+
 export function KeywordRankingsView({
   headerAction
 }: {
@@ -61,6 +73,8 @@ export function KeywordRankingsView({
   const [loading, setLoading] = React.useState(true);
   const [actionBusy, setActionBusy] = React.useState(false);
   const [crawlDialogOpen, setCrawlDialogOpen] = React.useState(false);
+  const [crawlTask, setCrawlTask] = React.useState<TaskResponse | null>(null);
+  const [crawlKeyword, setCrawlKeyword] = React.useState("");
   const [importTarget, setImportTarget] = React.useState<RankingBoard | null>(null);
   const [deletingBoard, setDeletingBoard] = React.useState<RankingBoard | null>(null);
   const [deleteBusy, setDeleteBusy] = React.useState(false);
@@ -110,6 +124,28 @@ export function KeywordRankingsView({
   React.useEffect(() => {
     setVisibleBoardCount(BOARD_PAGE_SIZE);
   }, [searchText]);
+
+  React.useEffect(() => {
+    if (!crawlTask || crawlTask.status === "finished" || crawlTask.status === "failed") {
+      return;
+    }
+    const timer = window.setInterval(async () => {
+      const next = await fetchTask(crawlTask.task_id);
+      if (!next) return;
+      setCrawlTask(next);
+      if (next.status === "finished") {
+        const keyword =
+          typeof next.result?.keyword === "string" ? next.result.keyword : crawlKeyword;
+        toast.success("在线爬取完成，已导入关键词榜单");
+        await loadBoards();
+        setSearchText(keyword);
+        setVisibleBoardCount(BOARD_PAGE_SIZE);
+      } else if (next.status === "failed") {
+        toast.error(next.error ?? "在线爬取失败");
+      }
+    }, 1200);
+    return () => window.clearInterval(timer);
+  }, [crawlKeyword, crawlTask, loadBoards]);
 
   const searchKeyword = searchText.trim().toLowerCase();
   const matchedBoards = searchKeyword
@@ -284,10 +320,13 @@ export function KeywordRankingsView({
             添加榜单
           </Button>
         </div>
-        <KeywordHeatRanking
-          rankings={keywordHeatRankings}
-          onSelect={(board) => setSearchText(board.keyword.keyword)}
-        />
+        <div className="mt-4 grid max-w-[1120px] grid-cols-2 items-start gap-4">
+          <KeywordHeatRanking
+            rankings={keywordHeatRankings}
+            onSelect={(board) => setSearchText(board.keyword.keyword)}
+          />
+          <CrawlerStatusPanel task={crawlTask} keyword={crawlKeyword} />
+        </div>
       </header>
 
       <div className="min-h-0 flex-1 overflow-auto p-6">
@@ -346,10 +385,10 @@ export function KeywordRankingsView({
         initialKeyword={searchText}
         industryId={industries.find((item) => item.status === "active")?.id ?? industries[0]?.id}
         onOpenChange={setCrawlDialogOpen}
-        onFinished={async (keyword) => {
-          await loadBoards();
-          setSearchText(keyword);
-          setVisibleBoardCount(BOARD_PAGE_SIZE);
+        onStarted={(task, keyword) => {
+          setCrawlTask(task);
+          setCrawlKeyword(keyword);
+          setCrawlDialogOpen(false);
         }}
       />
       <ImportCsvDialog
@@ -457,7 +496,7 @@ function KeywordHeatRanking({
   onSelect: (board: RankingBoard) => void;
 }) {
   return (
-    <Card className="mt-4 max-w-5xl overflow-hidden p-0">
+    <Card className="flex h-56 min-w-0 flex-col overflow-hidden p-0">
       <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
         <div>
           <h2 className="text-sm font-semibold">关键词热度排行</h2>
@@ -470,7 +509,7 @@ function KeywordHeatRanking({
           暂无匹配关键词，搜索后可添加新榜单。
         </div>
       ) : (
-        <div className="grid max-h-44 grid-cols-1 overflow-y-auto md:grid-cols-2">
+        <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto md:grid-cols-2">
           {rankings.map(({ board, heatScore }, index) => (
             <button
               key={board.keyword.id}
@@ -491,6 +530,91 @@ function KeywordHeatRanking({
           ))}
         </div>
       )}
+    </Card>
+  );
+}
+
+function CrawlerStatusPanel({
+  task,
+  keyword
+}: {
+  task: TaskResponse | null;
+  keyword: string;
+}) {
+  const progress = task?.progress;
+  const percent = progress?.percent ?? 0;
+  const currentVideo = getCurrentCrawlVideo(task);
+  const running = task !== null && !["finished", "failed"].includes(task.status);
+
+  return (
+    <Card className="flex h-56 min-w-0 flex-col overflow-hidden p-0">
+      <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+        <div className="min-w-0">
+          <h2 className="truncate text-sm font-semibold">在线爬取进度</h2>
+          <p className="truncate text-xs text-muted-foreground">
+            {keyword ? `当前关键词：${keyword}` : "点击顶部“在线爬取”开始生成榜单"}
+          </p>
+        </div>
+        <Badge variant="outline">
+          {task?.status === "failed" ? "失败" : running ? "爬取中" : task ? "完成" : "待开始"}
+        </Badge>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+        <div className="h-3 overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-full rounded-full bg-primary transition-all"
+            style={{ width: `${Math.max(task ? 2 : 0, Math.min(percent, 100))}%` }}
+          />
+        </div>
+        <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+          <span>{progress?.current_message ?? "暂无在线爬取任务"}</span>
+          <span className="font-semibold tabular-nums text-primary">{percent}%</span>
+        </div>
+
+        {currentVideo ? (
+          <div className="mt-3 space-y-2 text-sm">
+            <p className="max-h-10 overflow-hidden [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
+              {currentVideo.source_text || "当前视频暂无文案描述"}
+            </p>
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              <span>{currentVideo.author_name || "未知作者"}</span>
+              <span>粉 {formatNumber(currentVideo.author_follower_count ?? 0)}</span>
+              <span>赞 {formatNumber(currentVideo.likes ?? 0)}</span>
+              <span>评 {formatNumber(currentVideo.comments ?? 0)}</span>
+              <span>藏 {formatNumber(currentVideo.favorites ?? 0)}</span>
+              <span>转 {formatNumber(currentVideo.shares ?? 0)}</span>
+            </div>
+            <div className="flex flex-wrap gap-3 text-xs">
+              {currentVideo.source_url ? (
+                <a
+                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                  href={currentVideo.source_url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  视频链接
+                  <ExternalLink className="size-3" />
+                </a>
+              ) : null}
+              {currentVideo.author_url ? (
+                <a
+                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                  href={currentVideo.author_url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  作者主页
+                  <ExternalLink className="size-3" />
+                </a>
+              ) : null}
+            </div>
+          </div>
+        ) : (
+          <div className="mt-5 text-sm text-muted-foreground">
+            爬取开始后，这里会显示正在处理的视频链接、作者和流量信息。
+          </div>
+        )}
+      </div>
     </Card>
   );
 }
@@ -538,18 +662,17 @@ function CrawlerDialog({
   initialKeyword,
   industryId,
   onOpenChange,
-  onFinished
+  onStarted
 }: {
   open: boolean;
   initialKeyword: string;
   industryId?: string | null;
   onOpenChange: (open: boolean) => void;
-  onFinished: (keyword: string) => void | Promise<void>;
+  onStarted: (task: TaskResponse, keyword: string) => void;
 }) {
   const [keyword, setKeyword] = React.useState("");
   const [minLikes, setMinLikes] = React.useState(1000);
   const [maxVideos, setMaxVideos] = React.useState(50);
-  const [task, setTask] = React.useState<TaskResponse | null>(null);
   const [busy, setBusy] = React.useState(false);
 
   React.useEffect(() => {
@@ -557,28 +680,8 @@ function CrawlerDialog({
     setKeyword(initialKeyword.trim());
     setMinLikes(1000);
     setMaxVideos(50);
-    setTask(null);
     setBusy(false);
   }, [initialKeyword, open]);
-
-  React.useEffect(() => {
-    if (!task || task.status === "finished" || task.status === "failed") return;
-    const timer = window.setInterval(async () => {
-      const next = await fetchTask(task.task_id);
-      if (!next) return;
-      setTask(next);
-      if (next.status === "finished") {
-        toast.success("在线爬取完成，已导入关键词榜单");
-        setBusy(false);
-        await onFinished(keyword.trim());
-        onOpenChange(false);
-      } else if (next.status === "failed") {
-        toast.error(next.error ?? "在线爬取失败");
-        setBusy(false);
-      }
-    }, 1200);
-    return () => window.clearInterval(timer);
-  }, [keyword, onFinished, onOpenChange, task]);
 
   async function handleSubmit() {
     const keywordText = keyword.trim();
@@ -594,18 +697,15 @@ function CrawlerDialog({
         max_videos: maxVideos,
         industry_id: industryId ?? null
       });
-      setTask(nextTask);
+      onStarted(nextTask, keywordText);
     } catch (error) {
       setBusy(false);
       toast.error(error instanceof Error ? error.message : "在线爬取失败");
     }
   }
 
-  const progress = task?.progress?.percent ?? (busy ? 2 : 0);
-  const isRunning = busy || (task !== null && !["finished", "failed"].includes(task.status));
-
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !isRunning && onOpenChange(nextOpen)}>
+    <Dialog open={open} onOpenChange={(nextOpen) => !busy && onOpenChange(nextOpen)}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>在线爬取关键词榜单</DialogTitle>
@@ -613,55 +713,45 @@ function CrawlerDialog({
             爬取成功后会自动导入榜单，榜单名就是搜索关键词。
           </DialogDescription>
         </DialogHeader>
-        {isRunning ? (
-          <div className="py-6">
-            <div className="h-3 overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full rounded-full bg-primary transition-all"
-                style={{ width: `${Math.max(2, Math.min(progress, 100))}%` }}
-              />
-            </div>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>爬取关键词</Label>
+            <Input
+              value={keyword}
+              onChange={(event) => setKeyword(event.target.value)}
+              placeholder="例如：征信查询太多影响贷款吗"
+            />
           </div>
-        ) : (
-          <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label>爬取关键词</Label>
+              <Label>最低赞数</Label>
               <Input
-                value={keyword}
-                onChange={(event) => setKeyword(event.target.value)}
-                placeholder="例如：征信查询太多影响贷款吗"
+                type="number"
+                min={0}
+                value={minLikes}
+                onChange={(event) => setMinLikes(Math.max(0, Number(event.target.value) || 0))}
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>最低赞数</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={minLikes}
-                  onChange={(event) => setMinLikes(Math.max(0, Number(event.target.value) || 0))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>最多保存视频</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={200}
-                  value={maxVideos}
-                  onChange={(event) =>
-                    setMaxVideos(Math.max(1, Math.min(200, Number(event.target.value) || 1)))
-                  }
-                />
-              </div>
+            <div className="space-y-2">
+              <Label>最多保存视频</Label>
+              <Input
+                type="number"
+                min={1}
+                max={200}
+                value={maxVideos}
+                onChange={(event) =>
+                  setMaxVideos(Math.max(1, Math.min(200, Number(event.target.value) || 1)))
+                }
+              />
             </div>
           </div>
-        )}
+        </div>
         <DialogFooter>
-          <Button variant="outline" disabled={isRunning} onClick={() => onOpenChange(false)}>
+          <Button variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>
             取消
           </Button>
-          <Button disabled={isRunning} onClick={handleSubmit}>
+          <Button disabled={busy} onClick={handleSubmit}>
+            {busy ? <Loader2 className="size-4 animate-spin" /> : null}
             开始爬取
           </Button>
         </DialogFooter>
@@ -752,6 +842,12 @@ function ImportCsvDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function getCurrentCrawlVideo(task: TaskResponse | null): CurrentCrawlVideo | null {
+  const raw = task?.progress?.errors?.[0]?.current_video;
+  if (!raw || typeof raw !== "object") return null;
+  return raw as CurrentCrawlVideo;
 }
 
 function formatNumber(value: number): string {

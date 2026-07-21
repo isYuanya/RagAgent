@@ -248,13 +248,24 @@ export function importKeywordVideos(
   );
 }
 
-export function crawlKeywordVideos(body: KeywordCrawlerRequest): Promise<TaskResponse> {
-  return writeJson(
-    `${keywordRankingsBase}/keyword-videos/crawl`,
-    "POST",
-    body,
-    "在线爬取关键词视频失败"
-  );
+export async function crawlKeywordVideos(
+  body: KeywordCrawlerRequest
+): Promise<TaskResponse> {
+  const response = await fetch(`${keywordRankingsBase}/keyword-videos/crawl`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  const payload = await parseJson(response);
+  if (!response.ok) {
+    const detail = payload?.detail as string | undefined;
+    throw new Error(
+      response.status === 404
+        ? "在线爬取接口未加载，请重启后端服务后再试"
+        : detail ?? "在线爬取关键词视频失败"
+    );
+  }
+  return payload as TaskResponse;
 }
 
 // ---- Knowledge base ----

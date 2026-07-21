@@ -205,6 +205,9 @@ def _apply_crawler_progress(task_id: str, max_videos: int, line: str) -> None:
             success_count=saved_count,
             percent=percent,
             current_message=str(payload.get("message") or "正在在线爬取"),
+            errors=[{"current_video": payload["current_video"]}]
+            if isinstance(payload.get("current_video"), dict)
+            else [],
         ),
     )
 
