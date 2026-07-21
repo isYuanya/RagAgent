@@ -312,7 +312,7 @@ export function KeywordRankingsView({
             添加榜单
           </Button>
         </div>
-        <div className="mt-4 grid w-[1120px] grid-cols-2 items-start gap-4">
+        <div className="mt-4 grid w-full min-w-[1120px] grid-cols-2 items-start gap-4">
           <KeywordHeatRanking
             rankings={keywordHeatRankings}
             onSelect={(board) => setSearchText(board.keyword.keyword)}
@@ -327,7 +327,7 @@ export function KeywordRankingsView({
 
       <div className="min-h-0 flex-1 overflow-auto p-6">
         {loading ? (
-          <div className="grid min-w-[1120px] grid-cols-2 items-start gap-4">
+          <div className="grid w-full min-w-[1120px] grid-cols-2 items-start gap-4">
             {Array.from({ length: 4 }).map((_, index) => (
               <Skeleton key={index} className="h-[520px] rounded-lg" />
             ))}
@@ -345,7 +345,7 @@ export function KeywordRankingsView({
             hint="点击顶部“添加榜单”，系统会创建该关键词榜单；导入 CSV 后即可显示 Top10。"
           />
         ) : (
-          <div className="min-w-[1120px] space-y-4">
+          <div className="w-full min-w-[1120px] space-y-4">
             <div className="grid grid-cols-2 items-start gap-4">
               {visibleBoards.map((board) => (
                 <RankingCard
