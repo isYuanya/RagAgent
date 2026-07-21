@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -135,7 +136,7 @@ def _run_crawler_process(task_id: str, payload: KeywordCrawlerRequest) -> Path:
     env["PYTHONIOENCODING"] = "utf-8"
 
     process = subprocess.Popen(
-        [sys.executable, str(CRAWLER_SCRIPT)],
+        [_resolve_crawler_python(), str(CRAWLER_SCRIPT)],
         cwd=str(SCRIPTS_DIR),
         env=env,
         stdout=subprocess.PIPE,
@@ -160,6 +161,43 @@ def _run_crawler_process(task_id: str, payload: KeywordCrawlerRequest) -> Path:
     if not output_csv.exists():
         raise RuntimeError("爬虫完成但没有生成 CSV 文件")
     return output_csv
+
+
+def _resolve_crawler_python() -> str:
+    candidates = [
+        os.getenv("DOUYIN_CRAWLER_PYTHON"),
+        sys.executable,
+        str(Path(sys.base_prefix) / "python.exe"),
+        shutil.which("python"),
+    ]
+    checked: list[str] = []
+    for candidate in candidates:
+        if not candidate or candidate in checked:
+            continue
+        checked.append(candidate)
+        if _python_has_crawler_deps(candidate):
+            return candidate
+    raise RuntimeError(
+        "在线爬取缺少 Python 依赖：请在当前后端环境安装 faster-whisper 和 playwright，"
+        "或设置 DOUYIN_CRAWLER_PYTHON 指向已安装依赖的 Python。"
+    )
+
+
+def _python_has_crawler_deps(python_executable: str) -> bool:
+    try:
+        result = subprocess.run(
+            [
+                python_executable,
+                "-c",
+                "import faster_whisper; import playwright",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0
 
 
 def _write_task_config(payload: KeywordCrawlerRequest, output_csv: Path) -> Path:

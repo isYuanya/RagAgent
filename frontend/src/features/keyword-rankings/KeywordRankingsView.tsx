@@ -307,25 +307,21 @@ export function KeywordRankingsView({
             <Search className="size-4" />
             搜索
           </Button>
-          <Button
-            variant="outline"
-            onClick={() => setCrawlDialogOpen(true)}
-            disabled={actionBusy}
-          >
-            <Loader2 className="size-4" />
-            在线爬取
-          </Button>
           <Button onClick={handleAddBoard} disabled={actionBusy}>
             {actionBusy ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
             添加榜单
           </Button>
         </div>
-        <div className="mt-4 grid max-w-[1120px] grid-cols-2 items-start gap-4">
+        <div className="mt-4 grid w-[1120px] grid-cols-2 items-start gap-4">
           <KeywordHeatRanking
             rankings={keywordHeatRankings}
             onSelect={(board) => setSearchText(board.keyword.keyword)}
           />
-          <CrawlerStatusPanel task={crawlTask} keyword={crawlKeyword} />
+          <CrawlerStatusPanel
+            task={crawlTask}
+            keyword={crawlKeyword}
+            onStart={() => setCrawlDialogOpen(true)}
+          />
         </div>
       </header>
 
@@ -536,10 +532,12 @@ function KeywordHeatRanking({
 
 function CrawlerStatusPanel({
   task,
-  keyword
+  keyword,
+  onStart
 }: {
   task: TaskResponse | null;
   keyword: string;
+  onStart: () => void;
 }) {
   const progress = task?.progress;
   const percent = progress?.percent ?? 0;
@@ -548,16 +546,27 @@ function CrawlerStatusPanel({
 
   return (
     <Card className="flex h-56 min-w-0 flex-col overflow-hidden p-0">
-      <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+      <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5">
         <div className="min-w-0">
           <h2 className="truncate text-sm font-semibold">在线爬取进度</h2>
           <p className="truncate text-xs text-muted-foreground">
-            {keyword ? `当前关键词：${keyword}` : "点击顶部“在线爬取”开始生成榜单"}
+            {keyword ? `当前关键词：${keyword}` : "点击右上角“在线爬取”开始生成榜单"}
           </p>
         </div>
-        <Badge variant="outline">
-          {task?.status === "failed" ? "失败" : running ? "爬取中" : task ? "完成" : "待开始"}
-        </Badge>
+        <div className="flex shrink-0 items-center gap-2">
+          <Badge variant="outline">
+            {task?.status === "failed" ? "失败" : running ? "爬取中" : task ? "完成" : "待开始"}
+          </Badge>
+          <Button
+            size="sm"
+            className="h-8 px-3"
+            onClick={onStart}
+            disabled={running}
+          >
+            {running ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+            在线爬取
+          </Button>
+        </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
         <div className="h-3 overflow-hidden rounded-full bg-muted">
