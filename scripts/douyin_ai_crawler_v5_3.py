@@ -1103,6 +1103,8 @@ def collect_videos():
             )
             emit_progress(
                 phase="scrolling",
+                current_scroll=i + 1,
+                total_scroll=SCROLL_COUNT,
                 collected_count=len(videos),
                 eligible_count=eligible_count,
                 saved_count=0,
