@@ -1,7 +1,11 @@
+import json
+
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.services.keyword_crawler_jobs import _apply_crawler_progress
 from app.services.keyword_rankings import calculate_hot_score, reset_keyword_ranking_store
+from app.workers.tasks import create_task, get_task
 
 
 client = TestClient(app)
@@ -9,6 +13,49 @@ client = TestClient(app)
 
 def setup_function() -> None:
     reset_keyword_ranking_store()
+
+
+def test_keyword_crawler_progress_uses_visible_ratio_percent() -> None:
+    task = create_task()
+
+    _apply_crawler_progress(
+        task.task_id,
+        20,
+        "CRAWLER_PROGRESS "
+        + json.dumps(
+            {
+                "phase": "scrolling",
+                "current_scroll": 8,
+                "total_scroll": 20,
+                "eligible_count": 22,
+                "saved_count": 0,
+                "target_count": 20,
+                "message": "已滚动 8/20 次，满足点赞条件 22 条",
+            }
+        ),
+    )
+    scrolling = get_task(task.task_id)
+    assert scrolling is not None
+    assert scrolling.progress is not None
+    assert scrolling.progress.percent == 40
+
+    _apply_crawler_progress(
+        task.task_id,
+        20,
+        "CRAWLER_PROGRESS "
+        + json.dumps(
+            {
+                "phase": "processing_video",
+                "saved_count": 8,
+                "target_count": 20,
+                "message": "已爬取视频 8/20 条",
+            }
+        ),
+    )
+    processing = get_task(task.task_id)
+    assert processing is not None
+    assert processing.progress is not None
+    assert processing.progress.percent == 40
 
 
 def test_keyword_industry_keyword_and_import_flow() -> None:

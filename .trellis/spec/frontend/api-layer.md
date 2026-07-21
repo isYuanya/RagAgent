@@ -83,6 +83,12 @@ typed result through `GET /api/tasks/{task_id}`. Frontend code should keep the
 endpoint-specific request/accept functions in `lib/api.ts`, reuse `fetchTask`
 for polling, and parse `task.result` in the feature component before rendering.
 
+Keyword crawler progress uses the same `TaskResponse.progress.percent` field as
+the visible progress bar. The frontend must not rescale crawler percentages by
+phase. If the backend says `current_message = "已滚动 8/20 次..."` and
+`percent = 40`, the bar and number both show `40%`; processing-video progress
+follows the same visible ratio rule.
+
 ## Scenario: Frontend API Base and Dev Proxy
 
 ### 1. Scope / Trigger

@@ -227,16 +227,16 @@ def _apply_crawler_progress(task_id: str, max_videos: int, line: str) -> None:
         total_scroll = int(payload.get("total_scroll") or 0)
         current = current_scroll or min(eligible_count, target_count)
         progress_total = total_scroll or target_count
-        percent = min(25, round(_percent(current, progress_total) * 0.25))
+        percent = _percent(current, progress_total)
     elif phase in {"processing", "processing_video", "saving"}:
         current = saved_count
-        percent = min(90, 30 + round(_percent(current, target_count) * 0.6))
+        percent = _percent(current, target_count)
     elif phase == "finished":
         current = saved_count
-        percent = 92
+        percent = _percent(current, target_count)
     else:
         current = saved_count
-        percent = min(90, 30 + round(_percent(current, target_count) * 0.6))
+        percent = _percent(current, target_count)
     set_task_progress(
         task_id,
         TaskProgress(

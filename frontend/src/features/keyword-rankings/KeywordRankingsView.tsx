@@ -862,28 +862,6 @@ function getCurrentCrawlVideo(task: TaskResponse | null): CurrentCrawlVideo | nu
 function getDisplayCrawlPercent(task: TaskResponse | null): number {
   if (!task?.progress) return 0;
   if (task.status === "finished") return 100;
-  const message = task.progress.current_message ?? "";
-  const ratio = message.match(/(\d+)\s*\/\s*(\d+)/);
-  if (ratio) {
-    const current = Number(ratio[1]);
-    const total = Number(ratio[2]);
-    if (total > 0) {
-      const basePercent = Math.max(0, Math.min(100, Math.round((current / total) * 100)));
-      if (task.progress.phase === "scrolling" || message.includes("滚动")) {
-        return Math.min(25, Math.round(basePercent * 0.25));
-      }
-      if (
-        task.progress.phase === "processing_video" ||
-        task.progress.phase === "processing" ||
-        task.progress.phase === "saving" ||
-        message.includes("爬取视频") ||
-        message.includes("保存")
-      ) {
-        return Math.min(90, 30 + Math.round(basePercent * 0.6));
-      }
-    }
-  }
-  if (task.progress.phase === "importing") return Math.max(task.progress.percent, 92);
   return Math.max(0, Math.min(task.progress.percent, 100));
 }
 
