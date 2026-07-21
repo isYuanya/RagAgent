@@ -169,6 +169,13 @@ export type KeywordVideoImportRequest = {
   csv_text: string;
 };
 
+export type KeywordCrawlerRequest = {
+  keyword: string;
+  min_likes: number;
+  max_videos: number;
+  industry_id?: string | null;
+};
+
 export type KeywordVideoImportResponse = {
   industry_id: string;
   keyword_id: string;

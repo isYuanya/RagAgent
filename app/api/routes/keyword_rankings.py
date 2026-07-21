@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query, Response, status
 
 from app.schemas.keyword_rankings import (
+    KeywordCrawlerRequest,
     KeywordGroupCreate,
     KeywordGroupItem,
     KeywordGroupListResponse,
@@ -11,7 +12,8 @@ from app.schemas.keyword_rankings import (
     KeywordVideoImportResponse,
     KeywordVideoListResponse,
 )
-from app.services import keyword_rankings
+from app.schemas.task import TaskResponse
+from app.services import keyword_crawler_jobs, keyword_rankings
 
 
 router = APIRouter()
@@ -106,3 +108,8 @@ def import_keyword_videos(payload: KeywordVideoImportRequest):
     if result is None:
         raise HTTPException(status_code=404, detail="Keyword industry not found")
     return result
+
+
+@router.post("/keyword-videos/crawl", response_model=TaskResponse)
+def crawl_keyword_videos(payload: KeywordCrawlerRequest):
+    return keyword_crawler_jobs.enqueue_keyword_crawl(payload)

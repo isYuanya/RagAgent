@@ -12,6 +12,7 @@
   KnowledgeStatsResponse,
   KnowledgeTemplate,
   KnowledgeTemplateCreate,
+  KeywordCrawlerRequest,
   KeywordGroup,
   KeywordGroupCreate,
   KeywordIndustry,
@@ -244,6 +245,15 @@ export function importKeywordVideos(
     "POST",
     body,
     "导入关键词视频失败"
+  );
+}
+
+export function crawlKeywordVideos(body: KeywordCrawlerRequest): Promise<TaskResponse> {
+  return writeJson(
+    `${keywordRankingsBase}/keyword-videos/crawl`,
+    "POST",
+    body,
+    "在线爬取关键词视频失败"
   );
 }
 

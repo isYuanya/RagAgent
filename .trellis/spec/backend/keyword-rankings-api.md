@@ -28,6 +28,7 @@ POST   /api/keywords
 DELETE /api/keywords/{keyword_id}
 GET    /api/keywords/{keyword_id}/videos
 POST   /api/keyword-videos/import
+POST   /api/keyword-videos/crawl
 ```
 
 CSV import request:
@@ -37,6 +38,17 @@ CSV import request:
   "industry_id": "uuid",
   "keyword": "借钱",
   "csv_text": "source_text,source_url,..."
+}
+```
+
+Crawler request:
+
+```json
+{
+  "keyword": "征信查询太多影响贷款吗",
+  "min_likes": 1000,
+  "max_videos": 50,
+  "industry_id": "optional uuid"
 }
 ```
 
@@ -52,6 +64,14 @@ CSV import request:
   it, and all videos under those groups.
 - Deleting a keyword group physically removes that group and its videos.
 - Successful delete responses are `204 No Content` and have no response body.
+- `POST /api/keyword-videos/crawl` returns the shared `TaskResponse` contract,
+  runs the configured Douyin crawler script in the background, reads the
+  generated CSV, and imports it through the same CSV import service. The created
+  or updated keyword group name must be the searched keyword.
+- Crawler progress is derived from structured `CRAWLER_PROGRESS` lines emitted
+  by the script. If fewer videos satisfy `min_likes` than `max_videos`, the
+  progress total must shrink to the satisfying-video count rather than staying
+  fixed at `max_videos`.
 
 ### 4. Validation & Error Matrix
 

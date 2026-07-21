@@ -25,15 +25,17 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/features/shared/EmptyState";
 import { ConfirmDialog } from "@/features/shared/ConfirmDialog";
 import {
+  crawlKeywordVideos,
   createKeywordGroup,
   createKeywordIndustry,
   deleteKeywordGroup,
+  fetchTask,
   fetchKeywordGroupsPage,
   fetchKeywordIndustriesPage,
   fetchKeywordVideosPage,
   importKeywordVideos
 } from "@/lib/api";
-import type { KeywordGroup, KeywordIndustry, KeywordVideo } from "@/lib/types";
+import type { KeywordGroup, KeywordIndustry, KeywordVideo, TaskResponse } from "@/lib/types";
 
 const DEFAULT_INDUSTRY_NAME = "贷款";
 const KEYWORD_PAGE_SIZE = 100;
@@ -58,6 +60,7 @@ export function KeywordRankingsView({
   const [visibleBoardCount, setVisibleBoardCount] = React.useState(BOARD_PAGE_SIZE);
   const [loading, setLoading] = React.useState(true);
   const [actionBusy, setActionBusy] = React.useState(false);
+  const [crawlDialogOpen, setCrawlDialogOpen] = React.useState(false);
   const [importTarget, setImportTarget] = React.useState<RankingBoard | null>(null);
   const [deletingBoard, setDeletingBoard] = React.useState<RankingBoard | null>(null);
   const [deleteBusy, setDeleteBusy] = React.useState(false);
@@ -268,6 +271,14 @@ export function KeywordRankingsView({
             <Search className="size-4" />
             搜索
           </Button>
+          <Button
+            variant="outline"
+            onClick={() => setCrawlDialogOpen(true)}
+            disabled={actionBusy}
+          >
+            <Loader2 className="size-4" />
+            在线爬取
+          </Button>
           <Button onClick={handleAddBoard} disabled={actionBusy}>
             {actionBusy ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
             添加榜单
@@ -330,6 +341,17 @@ export function KeywordRankingsView({
         )}
       </div>
 
+      <CrawlerDialog
+        open={crawlDialogOpen}
+        initialKeyword={searchText}
+        industryId={industries.find((item) => item.status === "active")?.id ?? industries[0]?.id}
+        onOpenChange={setCrawlDialogOpen}
+        onFinished={async (keyword) => {
+          await loadBoards();
+          setSearchText(keyword);
+          setVisibleBoardCount(BOARD_PAGE_SIZE);
+        }}
+      />
       <ImportCsvDialog
         open={importTarget !== null}
         industry={importTarget?.industry ?? null}
@@ -508,6 +530,143 @@ function VideoRow({ video }: { video: KeywordVideo }) {
         )}
       </div>
     </div>
+  );
+}
+
+function CrawlerDialog({
+  open,
+  initialKeyword,
+  industryId,
+  onOpenChange,
+  onFinished
+}: {
+  open: boolean;
+  initialKeyword: string;
+  industryId?: string | null;
+  onOpenChange: (open: boolean) => void;
+  onFinished: (keyword: string) => void | Promise<void>;
+}) {
+  const [keyword, setKeyword] = React.useState("");
+  const [minLikes, setMinLikes] = React.useState(1000);
+  const [maxVideos, setMaxVideos] = React.useState(50);
+  const [task, setTask] = React.useState<TaskResponse | null>(null);
+  const [busy, setBusy] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!open) return;
+    setKeyword(initialKeyword.trim());
+    setMinLikes(1000);
+    setMaxVideos(50);
+    setTask(null);
+    setBusy(false);
+  }, [initialKeyword, open]);
+
+  React.useEffect(() => {
+    if (!task || task.status === "finished" || task.status === "failed") return;
+    const timer = window.setInterval(async () => {
+      const next = await fetchTask(task.task_id);
+      if (!next) return;
+      setTask(next);
+      if (next.status === "finished") {
+        toast.success("在线爬取完成，已导入关键词榜单");
+        setBusy(false);
+        await onFinished(keyword.trim());
+        onOpenChange(false);
+      } else if (next.status === "failed") {
+        toast.error(next.error ?? "在线爬取失败");
+        setBusy(false);
+      }
+    }, 1200);
+    return () => window.clearInterval(timer);
+  }, [keyword, onFinished, onOpenChange, task]);
+
+  async function handleSubmit() {
+    const keywordText = keyword.trim();
+    if (!keywordText) {
+      toast.error("请输入爬取关键词");
+      return;
+    }
+    setBusy(true);
+    try {
+      const nextTask = await crawlKeywordVideos({
+        keyword: keywordText,
+        min_likes: minLikes,
+        max_videos: maxVideos,
+        industry_id: industryId ?? null
+      });
+      setTask(nextTask);
+    } catch (error) {
+      setBusy(false);
+      toast.error(error instanceof Error ? error.message : "在线爬取失败");
+    }
+  }
+
+  const progress = task?.progress?.percent ?? (busy ? 2 : 0);
+  const isRunning = busy || (task !== null && !["finished", "failed"].includes(task.status));
+
+  return (
+    <Dialog open={open} onOpenChange={(nextOpen) => !isRunning && onOpenChange(nextOpen)}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>在线爬取关键词榜单</DialogTitle>
+          <DialogDescription>
+            爬取成功后会自动导入榜单，榜单名就是搜索关键词。
+          </DialogDescription>
+        </DialogHeader>
+        {isRunning ? (
+          <div className="py-6">
+            <div className="h-3 overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-primary transition-all"
+                style={{ width: `${Math.max(2, Math.min(progress, 100))}%` }}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>爬取关键词</Label>
+              <Input
+                value={keyword}
+                onChange={(event) => setKeyword(event.target.value)}
+                placeholder="例如：征信查询太多影响贷款吗"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>最低赞数</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={minLikes}
+                  onChange={(event) => setMinLikes(Math.max(0, Number(event.target.value) || 0))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>最多保存视频</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={200}
+                  value={maxVideos}
+                  onChange={(event) =>
+                    setMaxVideos(Math.max(1, Math.min(200, Number(event.target.value) || 1)))
+                  }
+                />
+              </div>
+            </div>
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" disabled={isRunning} onClick={() => onOpenChange(false)}>
+            取消
+          </Button>
+          <Button disabled={isRunning} onClick={handleSubmit}>
+            开始爬取
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

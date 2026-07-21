@@ -101,3 +101,10 @@ class KeywordVideoImportResponse(BaseModel):
     failed_count: int = Field(ge=0)
     video_count: int = Field(ge=0)
     errors: list[KeywordVideoImportRowError] = Field(default_factory=list)
+
+
+class KeywordCrawlerRequest(BaseModel):
+    keyword: str = Field(min_length=1, max_length=200)
+    min_likes: int = Field(default=1000, ge=0)
+    max_videos: int = Field(default=50, ge=1, le=200)
+    industry_id: str | None = None
