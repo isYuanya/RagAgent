@@ -38,6 +38,7 @@ import type { KeywordGroup, KeywordIndustry, KeywordVideo } from "@/lib/types";
 const DEFAULT_INDUSTRY_NAME = "贷款";
 const KEYWORD_PAGE_SIZE = 100;
 const TOP_VIDEO_COUNT = 10;
+const BOARD_PAGE_SIZE = 4;
 
 type RankingBoard = {
   industry: KeywordIndustry;
@@ -54,6 +55,7 @@ export function KeywordRankingsView({
   const [industries, setIndustries] = React.useState<KeywordIndustry[]>([]);
   const [boards, setBoards] = React.useState<RankingBoard[]>([]);
   const [searchText, setSearchText] = React.useState("");
+  const [visibleBoardCount, setVisibleBoardCount] = React.useState(BOARD_PAGE_SIZE);
   const [loading, setLoading] = React.useState(true);
   const [actionBusy, setActionBusy] = React.useState(false);
   const [importTarget, setImportTarget] = React.useState<RankingBoard | null>(null);
@@ -102,13 +104,18 @@ export function KeywordRankingsView({
     void loadBoards();
   }, [loadBoards]);
 
+  React.useEffect(() => {
+    setVisibleBoardCount(BOARD_PAGE_SIZE);
+  }, [searchText]);
+
   const searchKeyword = searchText.trim().toLowerCase();
   const matchedBoards = searchKeyword
     ? boards.filter((board) =>
         board.keyword.keyword.toLowerCase().includes(searchKeyword)
       )
     : boards;
-  const visibleBoards = matchedBoards.slice(0, 2);
+  const visibleBoards = matchedBoards.slice(0, visibleBoardCount);
+  const hasMoreBoards = visibleBoardCount < matchedBoards.length;
   const keywordHeatRankings = matchedBoards
     .map((board) => ({
       board,
@@ -276,7 +283,7 @@ export function KeywordRankingsView({
         {loading ? (
           <div className="grid min-w-[1120px] grid-cols-2 items-start gap-4">
             {Array.from({ length: 4 }).map((_, index) => (
-              <Skeleton key={index} className="h-[440px] rounded-lg" />
+              <Skeleton key={index} className="h-[520px] rounded-lg" />
             ))}
           </div>
         ) : boards.length === 0 ? (
@@ -292,16 +299,33 @@ export function KeywordRankingsView({
             hint="点击顶部“添加榜单”，系统会创建该关键词榜单；导入 CSV 后即可显示 Top10。"
           />
         ) : (
-          <div className="grid min-w-[1120px] grid-cols-2 items-start gap-4">
-            {visibleBoards.map((board) => (
-              <RankingCard
-                key={board.keyword.id}
-                board={board}
-                onRefresh={() => void refreshBoard(board.keyword.id)}
-                onImport={() => setImportTarget(board)}
-                onDelete={() => setDeletingBoard(board)}
-              />
-            ))}
+          <div className="min-w-[1120px] space-y-4">
+            <div className="grid grid-cols-2 items-start gap-4">
+              {visibleBoards.map((board) => (
+                <RankingCard
+                  key={board.keyword.id}
+                  board={board}
+                  onRefresh={() => void refreshBoard(board.keyword.id)}
+                  onImport={() => setImportTarget(board)}
+                  onDelete={() => setDeletingBoard(board)}
+                />
+              ))}
+            </div>
+            <div className="flex items-center justify-center gap-3">
+              <span className="text-xs text-muted-foreground">
+                已显示 {visibleBoards.length}/{matchedBoards.length} 个榜单
+              </span>
+              {hasMoreBoards ? (
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    setVisibleBoardCount((count) => count + BOARD_PAGE_SIZE)
+                  }
+                >
+                  加载更多
+                </Button>
+              ) : null}
+            </div>
           </div>
         )}
       </div>
