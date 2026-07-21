@@ -139,7 +139,7 @@ export function KeywordRankingsView({
     setActionBusy(true);
     try {
       const existingBoard = boards.find((board) =>
-        board.keyword.keyword.toLowerCase().includes(keywordText.toLowerCase())
+        board.keyword.keyword.toLowerCase() === keywordText.toLowerCase()
       );
       if (existingBoard) {
         await refreshBoard(existingBoard.keyword.id);
@@ -165,6 +165,24 @@ export function KeywordRankingsView({
     } finally {
       setActionBusy(false);
     }
+  }
+
+  async function handleSearchBoard() {
+    const keywordText = searchText.trim();
+    if (!keywordText) {
+      toast.message("已显示默认关键词榜单");
+      return;
+    }
+    const matched = boards.find((board) =>
+      board.keyword.keyword.toLowerCase().includes(keywordText.toLowerCase())
+    );
+    if (!matched) {
+      toast.message("未找到匹配榜单，可点击“添加榜单”创建");
+      return;
+    }
+    setSearchText(matched.keyword.keyword);
+    await refreshBoard(matched.keyword.id);
+    toast.success("已定位并刷新关键词榜单");
   }
 
   async function refreshBoard(keywordId: string) {
@@ -233,15 +251,19 @@ export function KeywordRankingsView({
               value={searchText}
               onChange={(event) => setSearchText(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === "Enter") void handleAddBoard();
+                if (event.key === "Enter") void handleSearchBoard();
               }}
               className="pl-9"
               placeholder="输入关键词，例如：征信查询太多影响贷款吗"
             />
           </div>
+          <Button variant="outline" onClick={handleSearchBoard} disabled={actionBusy}>
+            <Search className="size-4" />
+            搜索
+          </Button>
           <Button onClick={handleAddBoard} disabled={actionBusy}>
             {actionBusy ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-            搜索/添加
+            添加榜单
           </Button>
         </div>
         <KeywordHeatRanking
